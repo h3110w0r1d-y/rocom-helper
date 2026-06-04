@@ -8,7 +8,7 @@
 #include "storage/database_service.h"
 #include "traffic/traffic_event_mapper.h"
 #include "ui/catch/catch_window.h"
-#include "ui/flow_layout.h"
+#include "ui/marker_filter_panel.h"
 #include "ui/map/map_window.h"
 
 #include <QCheckBox>
@@ -53,8 +53,6 @@ private:
     void onMapChanged(const QString &mapId);
     void onLayerChanged(const QString &layerId);
     void renderMarkerTypeControls(const MarkerTypeMap &markerTypes);
-    void scheduleTypeLayoutRefresh();
-    void refreshTypeLayout();
     void showShinyAlert(const QJsonObject &payload);
     void forgetAlert(QMessageBox *dialog);
 
@@ -83,8 +81,7 @@ private:
     QPushButton *m_clearTrailButton = nullptr;
     QPushButton *m_importPathButton = nullptr;
     QPushButton *m_clearPathButton = nullptr;
-    FlowWidget *m_typeContainer = nullptr;
-    FlowLayout *m_typeLayout = nullptr;
+    MarkerFilterPanel *m_markerFilterPanel = nullptr;
     QPushButton *m_showCatchButton = nullptr;
     QTimer m_saveTimer;
     QList<QMessageBox *> m_alertWindows;

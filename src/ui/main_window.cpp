@@ -6,10 +6,8 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
-#include <QIcon>
 #include <QFile>
 #include <QJsonDocument>
-#include <QLayoutItem>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QSignalBlocker>
@@ -18,12 +16,6 @@
 #include <QXmlStreamReader>
 
 namespace app {
-namespace {
-
-const QSize MarkerTypeControlIconSize(20, 20);
-
-} // namespace
-
 MainWindow::MainWindow(QWidget *parent)
     : QWidget(parent)
     , m_mapWindow(new MapWindow(&m_dataCenter))
@@ -46,9 +38,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_dataCenter.load();
     if (m_database.isOpen()) {
+        m_database.resetMapMarkerVisibility();
         m_dataCenter.loadPersistentMarkers(m_database.queryMapMarkers());
     }
-    scheduleTypeLayoutRefresh();
     m_mapWindow->show();
     QTimer::singleShot(0, this, &MainWindow::toggleTraffic);
 }
@@ -108,9 +100,7 @@ void MainWindow::buildUi()
     m_clearTrailButton = new QPushButton(QStringLiteral("清空轨迹"), this);
     m_importPathButton = new QPushButton(QStringLiteral("导入path"), this);
     m_clearPathButton = new QPushButton(QStringLiteral("清空path"), this);
-    m_typeContainer = new FlowWidget(this);
-    m_typeLayout = new FlowLayout(m_typeContainer, 0, 6);
-    m_typeContainer->setLayout(m_typeLayout);
+    m_markerFilterPanel = new MarkerFilterPanel(this);
 
     mapLayout->addWidget(m_showMapButton, 0, 0);
     mapLayout->addWidget(m_topCheckbox, 0, 1);
@@ -124,7 +114,7 @@ void MainWindow::buildUi()
     mapLayout->addWidget(m_clearTrailButton, 6, 0, 1, 2);
     mapLayout->addWidget(m_importPathButton, 7, 0);
     mapLayout->addWidget(m_clearPathButton, 7, 1);
-    mapLayout->addWidget(m_typeContainer, 8, 0, 1, 2);
+    mapLayout->addWidget(m_markerFilterPanel, 8, 0, 1, 2);
 
     auto *s2Group = new QGroupBox(QStringLiteral("S2赛季功能"), this);
     auto *s2Layout = new QGridLayout(s2Group);
@@ -163,6 +153,8 @@ void MainWindow::connectSignals()
     connect(m_clearTrailButton, &QPushButton::clicked, m_mapWindow, &MapWindow::clearTrail);
     connect(m_importPathButton, &QPushButton::clicked, this, &MainWindow::importPathOverlay);
     connect(m_clearPathButton, &QPushButton::clicked, m_mapWindow, &MapWindow::clearPathOverlays);
+    connect(m_markerFilterPanel, &MarkerFilterPanel::typeVisibilityChanged, &m_dataCenter, &DataCenter::setMarkerTypeVisible);
+    connect(m_markerFilterPanel, &MarkerFilterPanel::subtypeVisibilityChanged, &m_dataCenter, &DataCenter::setMarkerSubtypeVisible);
 
     connect(&m_dataCenter, &DataCenter::baseStateLoaded, this, &MainWindow::onBaseStateLoaded);
     connect(&m_dataCenter, &DataCenter::stateLoaded, this, &MainWindow::onMapStateLoaded);
@@ -393,52 +385,8 @@ void MainWindow::onLayerChanged(const QString &layerId)
 
 void MainWindow::renderMarkerTypeControls(const MarkerTypeMap &markerTypes)
 {
-    while (m_typeLayout->count() > 0) {
-        QLayoutItem *item = m_typeLayout->takeAt(0);
-        if (item != nullptr) {
-            if (QWidget *widget = item->widget()) {
-                widget->deleteLater();
-            }
-            delete item;
-        }
-    }
-
-    for (const MarkerTypeConfig &markerType : markerTypes) {
-        auto *checkbox = new QCheckBox(markerType.name, this);
-        checkbox->setIcon(QIcon(QStringLiteral(":/icon/") + markerType.icon));
-        checkbox->setIconSize(MarkerTypeControlIconSize);
-        checkbox->setChecked(markerType.visible);
-        connect(checkbox, &QCheckBox::toggled, this, [this, key = markerType.key](bool checked) {
-            m_dataCenter.setMarkerTypeVisible(key, checked);
-        });
-        m_typeLayout->addWidget(checkbox);
-
-        for (const MarkerSubtypeConfig &subtype : markerType.subtypes) {
-            const QString subtypeName = subtype.key.isEmpty() ? QStringLiteral("默认") : subtype.key;
-            auto *subtypeCheckbox = new QCheckBox(subtypeName, this);
-            subtypeCheckbox->setToolTip(QStringLiteral("%1/%2").arg(markerType.name, subtypeName));
-            subtypeCheckbox->setChecked(subtype.visible);
-            connect(subtypeCheckbox, &QCheckBox::toggled, this, [this, key = markerType.key, subtypeKey = subtype.key](bool checked) {
-                m_dataCenter.setMarkerSubtypeVisible(key, subtypeKey, checked);
-            });
-            m_typeLayout->addWidget(subtypeCheckbox);
-        }
-    }
-    m_typeContainer->refreshHeight();
-    scheduleTypeLayoutRefresh();
-}
-
-void MainWindow::scheduleTypeLayoutRefresh()
-{
-    QTimer::singleShot(0, this, &MainWindow::refreshTypeLayout);
-    QTimer::singleShot(50, this, &MainWindow::refreshTypeLayout);
-}
-
-void MainWindow::refreshTypeLayout()
-{
-    m_typeContainer->refreshHeight();
-    if (layout() != nullptr) {
-        layout()->activate();
+    if (m_markerFilterPanel != nullptr) {
+        m_markerFilterPanel->setMarkerTypes(markerTypes);
     }
 }
 
@@ -495,7 +443,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
-    scheduleTypeLayoutRefresh();
 }
 
 } // namespace app

@@ -20,6 +20,7 @@ public:
 
     bool open(const QString &path = {});
     bool isOpen() const;
+    void resetMapMarkerVisibility();
     QJsonArray queryMapMarkers() const;
     QJsonArray queryPetInfo() const;
     QJsonArray queryBoxInfo() const;

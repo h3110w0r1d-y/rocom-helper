@@ -53,6 +53,17 @@ bool DatabaseService::isOpen() const
     return m_db.isOpen();
 }
 
+void DatabaseService::resetMapMarkerVisibility()
+{
+    if (!m_db.isOpen()) {
+        return;
+    }
+    QSqlQuery query(m_db);
+    if (!query.exec(QStringLiteral("update map_markers set visible = 1"))) {
+        emit errorOccurred(QStringLiteral("重置地图点位可见状态失败: %1").arg(query.lastError().text()));
+    }
+}
+
 QJsonArray DatabaseService::queryMapMarkers() const
 {
     QJsonArray rows;
