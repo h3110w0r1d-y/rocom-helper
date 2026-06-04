@@ -50,7 +50,9 @@ target_link_libraries(rwtd
 
 target_compile_features(rwtd PUBLIC cxx_std_17)
 
-if(MINGW)
+if(MSVC)
+    target_compile_options(rwtd PRIVATE /bigobj)
+elseif(MINGW)
     target_compile_options(rwtd PRIVATE -Wa,-mbig-obj)
 endif()
 
