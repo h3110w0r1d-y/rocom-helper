@@ -50,6 +50,10 @@ target_link_libraries(rwtd
 
 target_compile_features(rwtd PUBLIC cxx_std_17)
 
+if(MINGW)
+    target_compile_options(rwtd PRIVATE -Wa,-mbig-obj)
+endif()
+
 qt_add_executable(roco_helper
         src/main.cpp
         ${APP_SOURCES}
