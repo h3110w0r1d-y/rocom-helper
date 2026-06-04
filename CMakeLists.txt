@@ -20,6 +20,8 @@ file(GLOB_RECURSE RWTD_SOURCES CONFIGURE_DEPENDS
 )
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/data/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/data/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/events/*.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/events/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/traffic/*.h"
@@ -28,6 +30,10 @@ file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/storage/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/http/*.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/http/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*/*.cpp"
 )
 
 file(GLOB_RECURSE APP_RESOURCE_FILES CONFIGURE_DEPENDS

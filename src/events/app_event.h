@@ -11,6 +11,21 @@ enum class EventType {
     Unknown,
     ExampleTrafficDetected,
     ExampleHttpCommand,
+    RawTrafficDecoded,
+    PlayerPositionChanged,
+    MapMarkerAdded,
+    MapMarkerMoved,
+    MapMarkerUpdated,
+    MapMarkerDeleted,
+    MapMarkerVisibilityChanged,
+    MapMarkerTypeVisibilityChanged,
+    CatchRecordAdded,
+    ShinyPetDetected,
+    PetInfoReload,
+    PetInfoChanged,
+    PetInfoDeleted,
+    BoxInfoReload,
+    BoxInfoChanged,
 };
 
 enum class EventSource {
@@ -43,6 +58,36 @@ inline QString eventTypeName(EventType type)
         return QStringLiteral("example.traffic_detected");
     case EventType::ExampleHttpCommand:
         return QStringLiteral("example.http_command");
+    case EventType::RawTrafficDecoded:
+        return QStringLiteral("traffic.raw_decoded");
+    case EventType::PlayerPositionChanged:
+        return QStringLiteral("map.player_position_changed");
+    case EventType::MapMarkerAdded:
+        return QStringLiteral("map.marker_added");
+    case EventType::MapMarkerMoved:
+        return QStringLiteral("map.marker_moved");
+    case EventType::MapMarkerUpdated:
+        return QStringLiteral("map.marker_updated");
+    case EventType::MapMarkerDeleted:
+        return QStringLiteral("map.marker_deleted");
+    case EventType::MapMarkerVisibilityChanged:
+        return QStringLiteral("map.marker_visibility_changed");
+    case EventType::MapMarkerTypeVisibilityChanged:
+        return QStringLiteral("map.marker_type_visibility_changed");
+    case EventType::CatchRecordAdded:
+        return QStringLiteral("catch.record_added");
+    case EventType::ShinyPetDetected:
+        return QStringLiteral("catch.shiny_pet_detected");
+    case EventType::PetInfoReload:
+        return QStringLiteral("pet_info.reload");
+    case EventType::PetInfoChanged:
+        return QStringLiteral("pet_info.changed");
+    case EventType::PetInfoDeleted:
+        return QStringLiteral("pet_info.deleted");
+    case EventType::BoxInfoReload:
+        return QStringLiteral("box.reload");
+    case EventType::BoxInfoChanged:
+        return QStringLiteral("box.changed");
     case EventType::Unknown:
         break;
     }
@@ -82,4 +127,3 @@ Q_DECLARE_METATYPE(app::AppEvent)
 Q_DECLARE_METATYPE(app::EventType)
 Q_DECLARE_METATYPE(app::EventSource)
 Q_DECLARE_METATYPE(app::EventFlags)
-

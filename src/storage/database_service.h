@@ -1,7 +1,9 @@
 #pragma once
 
+#include "data/map_types.h"
 #include "events/app_event.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QSqlDatabase>
@@ -17,10 +19,16 @@ public:
     ~DatabaseService() override;
 
     bool open(const QString &path = {});
+    bool isOpen() const;
     QJsonObject queryExampleState() const;
+    QJsonArray queryMapMarkers() const;
+    QJsonArray queryPetInfo() const;
+    QJsonArray queryBoxInfo() const;
 
 public slots:
     void handleEvent(const app::AppEvent &event);
+    void upsertMarker(const app::MapMarker &marker);
+    void deleteMarker(const QString &markerId);
 
 signals:
     void eventPersisted(const app::AppEvent &event, qint64 id);
@@ -29,6 +37,11 @@ signals:
 private:
     bool ensureSchema();
     qint64 insertEvent(const app::AppEvent &event);
+    void handlePetInfoEvent(const app::AppEvent &event);
+    void handleBoxInfoEvent(const app::AppEvent &event);
+    void savePetInfo(int petId, const QJsonObject &data);
+    void replaceBoxes(const QJsonArray &boxes);
+    void changeBoxSlot(int boxId, int pos, int value);
     QString defaultDatabasePath() const;
 
     QString m_connectionName;
@@ -36,4 +49,3 @@ private:
 };
 
 } // namespace app
-

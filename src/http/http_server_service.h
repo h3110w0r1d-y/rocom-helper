@@ -5,6 +5,7 @@
 #include <QByteArray>
 #include <QHttpServer>
 #include <QHttpServerResponder>
+#include <QJsonArray>
 #include <QObject>
 #include <QTcpServer>
 
@@ -35,6 +36,8 @@ signals:
 private:
     void setupRoutes();
     QHttpServerResponse jsonResponse(const QJsonObject &object) const;
+    QHttpServerResponse jsonArrayResponse(const QJsonArray &array) const;
+    void acceptSseClient(QHttpServerResponder &&responder);
 
     DatabaseService *m_database = nullptr;
     QHttpServer m_server;

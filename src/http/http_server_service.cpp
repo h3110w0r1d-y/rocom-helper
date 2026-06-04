@@ -65,6 +65,21 @@ void HttpServerService::rememberLastSsePayload(const QByteArray &payload)
 
 void HttpServerService::setupRoutes()
 {
+    m_server.route(QStringLiteral("/api/health"), QHttpServerRequest::Method::Get, this, [this] {
+        return jsonResponse({
+            {QStringLiteral("ok"), true},
+            {QStringLiteral("database_ready"), m_database != nullptr && m_database->isOpen()},
+        });
+    });
+
+    m_server.route(QStringLiteral("/api/pet-info"), QHttpServerRequest::Method::Get, this, [this] {
+        return jsonArrayResponse(m_database != nullptr ? m_database->queryPetInfo() : QJsonArray());
+    });
+
+    m_server.route(QStringLiteral("/api/box-info"), QHttpServerRequest::Method::Get, this, [this] {
+        return jsonArrayResponse(m_database != nullptr ? m_database->queryBoxInfo() : QJsonArray());
+    });
+
     // Example query flow: HTTP -> DatabaseService -> HTTP response.
     m_server.route(QStringLiteral("/api/example-state"), QHttpServerRequest::Method::Get, this, [this] {
         return jsonResponse(m_database != nullptr ? m_database->queryExampleState()
@@ -95,19 +110,35 @@ void HttpServerService::setupRoutes()
     // Example SSE flow: AppEvent -> SseBroadcaster -> every connected HTTP client.
     m_server.route(QStringLiteral("/events"), QHttpServerRequest::Method::Get, this,
                    [this](QHttpServerResponder &&responder) {
-        const QByteArray payload = m_lastSsePayload.isEmpty()
-            ? QByteArray("event: ready\ndata: {\"ok\":true}\n\n")
-            : m_lastSsePayload;
-        auto client = std::make_unique<QHttpServerResponder>(std::move(responder));
-        client->writeBeginChunked(QByteArrayLiteral("text/event-stream"));
-        client->writeChunk(payload);
-        m_sseClients.push_back(std::move(client));
+        acceptSseClient(std::move(responder));
+    });
+    m_server.route(QStringLiteral("/api/events"), QHttpServerRequest::Method::Get, this,
+                   [this](QHttpServerResponder &&responder) {
+        acceptSseClient(std::move(responder));
     });
 }
 
 QHttpServerResponse HttpServerService::jsonResponse(const QJsonObject &object) const
 {
     return QHttpServerResponse(object);
+}
+
+QHttpServerResponse HttpServerService::jsonArrayResponse(const QJsonArray &array) const
+{
+    return QHttpServerResponse(
+        QByteArrayLiteral("application/json"),
+        QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+void HttpServerService::acceptSseClient(QHttpServerResponder &&responder)
+{
+    const QByteArray payload = m_lastSsePayload.isEmpty()
+        ? QByteArray("event: ready\ndata: {\"ok\":true}\n\n")
+        : m_lastSsePayload;
+    auto client = std::make_unique<QHttpServerResponder>(std::move(responder));
+    client->writeBeginChunked(QByteArrayLiteral("text/event-stream"));
+    client->writeChunk(payload);
+    m_sseClients.push_back(std::move(client));
 }
 
 } // namespace app

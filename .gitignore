@@ -2,3 +2,4 @@
 /rwtd
 /cmake-build-*
 .DS_Store
+/legacy
