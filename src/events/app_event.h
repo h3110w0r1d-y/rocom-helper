@@ -1,0 +1,85 @@
+#pragma once
+
+#include <QDateTime>
+#include <QJsonObject>
+#include <QMetaType>
+#include <QString>
+
+namespace app {
+
+enum class EventType {
+    Unknown,
+    ExampleTrafficDetected,
+    ExampleHttpCommand,
+};
+
+enum class EventSource {
+    Unknown,
+    Traffic,
+    Http,
+    Ui,
+};
+
+enum EventFlag {
+    Persist = 0x01,
+    UpdateUi = 0x02,
+    PushSse = 0x04,
+};
+Q_DECLARE_FLAGS(EventFlags, EventFlag)
+
+struct AppEvent {
+    EventType type = EventType::Unknown;
+    EventSource source = EventSource::Unknown;
+    EventFlags flags;
+    QDateTime occurredAt = QDateTime::currentDateTimeUtc();
+    QString name;
+    QJsonObject payload;
+};
+
+inline QString eventTypeName(EventType type)
+{
+    switch (type) {
+    case EventType::ExampleTrafficDetected:
+        return QStringLiteral("example.traffic_detected");
+    case EventType::ExampleHttpCommand:
+        return QStringLiteral("example.http_command");
+    case EventType::Unknown:
+        break;
+    }
+    return QStringLiteral("unknown");
+}
+
+inline QString eventSourceName(EventSource source)
+{
+    switch (source) {
+    case EventSource::Traffic:
+        return QStringLiteral("traffic");
+    case EventSource::Http:
+        return QStringLiteral("http");
+    case EventSource::Ui:
+        return QStringLiteral("ui");
+    case EventSource::Unknown:
+        break;
+    }
+    return QStringLiteral("unknown");
+}
+
+inline QJsonObject appEventToJson(const AppEvent &event)
+{
+    return {
+        {QStringLiteral("type"), eventTypeName(event.type)},
+        {QStringLiteral("source"), eventSourceName(event.source)},
+        {QStringLiteral("occurredAt"), event.occurredAt.toString(Qt::ISODateWithMs)},
+        {QStringLiteral("name"), event.name},
+        {QStringLiteral("payload"), event.payload},
+    };
+}
+
+} // namespace app
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(app::EventFlags)
+Q_DECLARE_METATYPE(app::AppEvent)
+Q_DECLARE_METATYPE(app::EventType)
+Q_DECLARE_METATYPE(app::EventSource)
+Q_DECLARE_METATYPE(app::EventFlags)
+

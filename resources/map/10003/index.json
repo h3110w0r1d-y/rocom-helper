@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "id": "10003",
+  "name": "卡洛西亚大陆",
+  "game_bounds": [
+    {
+      "x": 300000,
+      "y": 400000
+    },
+    {
+      "x": 700000,
+      "y": 800000
+    }
+  ],
+  "transform": {
+    "scale_x": 0.02009493,
+    "offset_x": -6157.09916950,
+    "scale_y": 0.02007945,
+    "offset_y": -8195.14113229
+  },
+  "tile": {
+    "width": 2048,
+    "height": 2048,
+    "cols": 4,
+    "rows": 4
+  },
+  "top_layer_id": "g",
+  "layers": [
+    {
+      "id": "g",
+      "name": "顶层",
+      "order": 0,
+      "default_z": 0,
+      "areas": []
+    },
+    {
+      "id": "b1",
+      "name": "一层",
+      "order": -1,
+      "default_z": -1000,
+      "mask_opacity": 0.7,
+      "images": [
+        {
+          "path": "A2_08_Assets_Humanities_06_LM.png",
+          "x": 5047,
+          "y": 5560
+        },
+        {
+          "path": "Cave_A2_02_02_CaveTunnel_Cave_A2_02_02_01.png",
+          "x": 4197,
+          "y": 4786
+        },
+        {
+          "path": "Cave_A2_07_02_CaveTunnel_Cave_A2_07_02_01.png",
+          "x": 4766,
+          "y": 4433
+        },
+        {
+          "path": "Cave_A2_02_01_CaveTunnel_Cave_A2_02_01_01.png",
+          "x": 4094,
+          "y": 4301
+        },
+        {
+          "path": "Cave_A2_07_01_CaveTunnel_Cave_A2_07_01_01.png",
+          "x": 5403,
+          "y": 4499
+        }
+      ],
+      "areas": []
+    },
+    {
+      "id": "b2",
+      "name": "二层",
+      "order": -2,
+      "default_z": -2000,
+      "mask_opacity": 0.7,
+      "images": [
+        {
+          "path": "Cave_A2_02_02_CaveTunnel_Cave_A2_02_02_02.png",
+          "x": 4197,
+          "y": 4786
+        },
+        {
+          "path": "Cave_A2_02_01_CaveTunnel_Cave_A2_02_01_02.png",
+          "x": 4094,
+          "y": 4301
+        }
+      ],
+      "areas": []
+    }
+  ]
+}

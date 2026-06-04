@@ -1,0 +1,324 @@
+#include "live_capture_service.h"
+
+#include "record_decoder.h"
+
+#include <QCoreApplication>
+#include <QDir>
+#include <QMutexLocker>
+#include <QStandardPaths>
+
+#include <Packet.h>
+#include <PcapFilter.h>
+#include <PcapLiveDevice.h>
+#include <PcapLiveDeviceList.h>
+#include <TcpReassembly.h>
+
+namespace rwtd {
+namespace {
+
+QString ipToString(const pcpp::IPAddress &ip)
+{
+    return QString::fromStdString(ip.toString());
+}
+
+QString defaultKeyPath()
+{
+    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (dataDir.isEmpty()) {
+        dataDir = QCoreApplication::applicationDirPath();
+    }
+    return QDir(dataDir).filePath(QStringLiteral("traffic_key.json"));
+}
+
+} // namespace
+
+LiveCaptureService::LiveCaptureService(QObject *parent)
+    : QObject(parent)
+    , m_keyCache(defaultKeyPath())
+{
+    qRegisterMetaType<rwtd::DecodedAction>("rwtd::DecodedAction");
+}
+
+LiveCaptureService::~LiveCaptureService()
+{
+    stop();
+}
+
+QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
+{
+    QList<CaptureDeviceInfo> result;
+    const auto &devices = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDevicesList();
+    for (const pcpp::PcapLiveDevice *device : devices) {
+        CaptureDeviceInfo info;
+        info.name = QString::fromStdString(device->getName());
+        info.description = QString::fromStdString(device->getDesc());
+        for (const auto &address : device->getIPAddresses()) {
+            info.addresses.append(ipToString(address));
+        }
+        info.loopback = device->getLoopback();
+        result.append(info);
+    }
+    return result;
+}
+
+bool LiveCaptureService::loadSchemas(const QString &dataDir)
+{
+    QMutexLocker locker(&m_mutex);
+    if (!m_protobuf.load(dataDir)) {
+        emit errorOccurred(m_protobuf.errorString());
+        return false;
+    }
+    m_knownOpcodes = m_protobuf.knownOpcodes();
+    emit statusChanged(QStringLiteral("已加载 protobuf schema: %1 个 opcode").arg(m_knownOpcodes.size()));
+    return true;
+}
+
+bool LiveCaptureService::start(const QString &deviceName, quint16 port)
+{
+    QMutexLocker locker(&m_mutex);
+    if (m_running) {
+        return true;
+    }
+    if (!m_protobuf.isAvailable()) {
+        emit errorOccurred(QStringLiteral("schema 尚未加载"));
+        return false;
+    }
+
+    m_device = pcpp::PcapLiveDeviceList::getInstance().getDeviceByName(deviceName.toStdString());
+    if (m_device == nullptr) {
+        emit errorOccurred(QStringLiteral("找不到网卡: %1").arg(deviceName));
+        return false;
+    }
+
+    pcpp::PcapLiveDevice::DeviceConfiguration config(
+        pcpp::PcapLiveDevice::Promiscuous,
+        100,
+        4 * 1024 * 1024,
+        pcpp::PcapLiveDevice::PCPP_INOUT);
+    if (!m_device->open(config)) {
+        emit errorOccurred(QStringLiteral("打开网卡失败，可能需要抓包权限: %1").arg(deviceName));
+        m_device = nullptr;
+        return false;
+    }
+
+    pcpp::BPFStringFilter portFilter(QStringLiteral("tcp port %1").arg(port).toStdString());
+    if (!m_device->setFilter(portFilter)) {
+        emit errorOccurred(QStringLiteral("设置抓包过滤器失败: tcp port %1").arg(port));
+        m_device->close();
+        m_device = nullptr;
+        return false;
+    }
+
+    m_port = port;
+    m_flowKeys.clear();
+    m_streamParsers.clear();
+    m_processedPackets.clear();
+    m_reassembly = std::make_unique<pcpp::TcpReassembly>(
+        &LiveCaptureService::onTcpMessageReady,
+        this);
+
+    if (!m_device->startCapture(&LiveCaptureService::onPacketArrives, this)) {
+        emit errorOccurred(QStringLiteral("启动抓包失败: %1").arg(deviceName));
+        m_reassembly.reset();
+        m_device->close();
+        m_device = nullptr;
+        return false;
+    }
+
+    m_running = true;
+    emit statusChanged(QStringLiteral("正在监听 %1，端口 %2").arg(deviceName).arg(port));
+    return true;
+}
+
+void LiveCaptureService::stop()
+{
+    QMutexLocker locker(&m_mutex);
+    if (!m_running && m_device == nullptr) {
+        return;
+    }
+
+    if (m_device != nullptr) {
+        m_device->stopCapture();
+    }
+    if (m_reassembly) {
+        m_reassembly->closeAllConnections();
+        m_reassembly.reset();
+    }
+    if (m_device != nullptr) {
+        m_device->close();
+        m_device = nullptr;
+    }
+    m_running = false;
+    emit statusChanged(QStringLiteral("监听已停止"));
+}
+
+bool LiveCaptureService::isRunning() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_running;
+}
+
+void LiveCaptureService::onPacketArrives(pcpp::RawPacket *packet, pcpp::PcapLiveDevice *, void *userCookie)
+{
+    auto *service = static_cast<LiveCaptureService *>(userCookie);
+    if (service == nullptr || packet == nullptr) {
+        return;
+    }
+
+    QMutexLocker locker(&service->m_mutex);
+    if (service->m_reassembly) {
+        service->m_reassembly->reassemblePacket(packet);
+    }
+}
+
+void LiveCaptureService::onTcpMessageReady(int8_t side, const pcpp::TcpStreamData &tcpData, void *userCookie)
+{
+    auto *service = static_cast<LiveCaptureService *>(userCookie);
+    if (service != nullptr) {
+        service->handleTcpData(side, tcpData);
+    }
+}
+
+void LiveCaptureService::handleTcpData(int8_t side, const pcpp::TcpStreamData &tcpData)
+{
+    const DirectionInfo info = classify(side, tcpData.getConnectionData());
+    if (!info.valid || tcpData.getDataLength() == 0) {
+        return;
+    }
+
+    const QString parserKey = streamKey(info.flowId, info.direction);
+    if (tcpData.isBytesMissing()) {
+        m_streamParsers[parserKey].reset();
+        emit statusChanged(QStringLiteral("TCP 流缺失 %1 字节，已重置流缓冲: %2 %3")
+                               .arg(tcpData.getMissingByteCount())
+                               .arg(info.flowId, trafficDirectionName(info.direction)));
+    }
+
+    const QByteArray chunk(reinterpret_cast<const char *>(tcpData.getData()), static_cast<qsizetype>(tcpData.getDataLength()));
+    QList<TgcpPacket> packets = m_streamParsers[parserKey].feed(info.flowId, info.direction, chunk);
+    for (const TgcpPacket &packet : packets) {
+        handleTgcpPacket(packet);
+    }
+}
+
+void LiveCaptureService::handleTgcpPacket(const TgcpPacket &packet)
+{
+    const QString packetKey = QStringLiteral("%1|%2|%3")
+                                  .arg(packet.flowId, trafficDirectionName(packet.direction))
+                                  .arg(packet.streamOffset);
+    if (m_processedPackets.contains(packetKey)) {
+        return;
+    }
+
+    if (packet.base.command == TgcpCommandAck) {
+        const QByteArray key = extractTgcpAckKey(packet);
+        if (key.size() == 16) {
+            rememberFlowKey(packet.flowId, key);
+            emit statusChanged(QStringLiteral("已捕获 AES key: %1").arg(packet.flowId));
+        }
+        m_processedPackets.insert(packetKey);
+        return;
+    }
+
+    if (packet.base.command != TgcpCommandData) {
+        m_processedPackets.insert(packetKey);
+        return;
+    }
+
+    const QByteArray key = keyForFlow(packet.flowId);
+    if (key.size() != 16) {
+        return;
+    }
+
+    const std::optional<DecryptedRecord> record = DataRecordDecoder::decryptAndParse(key, packet, m_knownOpcodes);
+    m_processedPackets.insert(packetKey);
+    if (!record.has_value()) {
+        return;
+    }
+
+    QJsonObject payload;
+    if (!m_protobuf.decode(record->opcode, record->payload, &payload)) {
+        return;
+    }
+
+    DecodedAction action;
+    action.flowId = packet.flowId;
+    action.direction = packet.direction;
+    action.opcode = record->opcode;
+    action.messageName = m_protobuf.messageNameForOpcode(record->opcode);
+    action.payload = payload;
+    emit actionDecoded(action);
+}
+
+LiveCaptureService::DirectionInfo LiveCaptureService::classify(int8_t side, const pcpp::ConnectionData &connectionData) const
+{
+    QString srcIp;
+    QString dstIp;
+    quint16 srcPort = 0;
+    quint16 dstPort = 0;
+
+    if (side == 0) {
+        srcIp = ipToString(connectionData.srcIP);
+        dstIp = ipToString(connectionData.dstIP);
+        srcPort = connectionData.srcPort;
+        dstPort = connectionData.dstPort;
+    } else {
+        srcIp = ipToString(connectionData.dstIP);
+        dstIp = ipToString(connectionData.srcIP);
+        srcPort = connectionData.dstPort;
+        dstPort = connectionData.srcPort;
+    }
+
+    DirectionInfo info;
+    QString clientIp;
+    QString serverIp;
+    quint16 clientPort = 0;
+    quint16 serverPort = 0;
+    if (dstPort == m_port) {
+        clientIp = srcIp;
+        clientPort = srcPort;
+        serverIp = dstIp;
+        serverPort = dstPort;
+        info.direction = TrafficDirection::ClientToServer;
+    } else if (srcPort == m_port) {
+        clientIp = dstIp;
+        clientPort = dstPort;
+        serverIp = srcIp;
+        serverPort = srcPort;
+        info.direction = TrafficDirection::ServerToClient;
+    } else {
+        return info;
+    }
+
+    info.flowId = QStringLiteral("%1:%2->%3:%4").arg(clientIp).arg(clientPort).arg(serverIp).arg(serverPort);
+    info.valid = true;
+    return info;
+}
+
+QString LiveCaptureService::streamKey(const QString &flowId, TrafficDirection direction) const
+{
+    return flowId + QLatin1Char('|') + trafficDirectionName(direction);
+}
+
+QByteArray LiveCaptureService::keyForFlow(const QString &flowId)
+{
+    QByteArray key = m_flowKeys.value(flowId);
+    if (key.isEmpty()) {
+        key = m_keyCache.keyForFlow(flowId);
+        if (key.size() == 16) {
+            m_flowKeys.insert(flowId, key);
+        }
+    }
+    return key;
+}
+
+void LiveCaptureService::rememberFlowKey(const QString &flowId, const QByteArray &key)
+{
+    if (key.size() != 16) {
+        return;
+    }
+    m_flowKeys.insert(flowId, key);
+    m_keyCache.rememberKey(flowId, key);
+}
+
+} // namespace rwtd
