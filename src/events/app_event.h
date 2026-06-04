@@ -9,8 +9,6 @@ namespace app {
 
 enum class EventType {
     Unknown,
-    ExampleTrafficDetected,
-    ExampleHttpCommand,
     RawTrafficDecoded,
     PlayerPositionChanged,
     MapMarkerAdded,
@@ -54,10 +52,6 @@ struct AppEvent {
 inline QString eventTypeName(EventType type)
 {
     switch (type) {
-    case EventType::ExampleTrafficDetected:
-        return QStringLiteral("example.traffic_detected");
-    case EventType::ExampleHttpCommand:
-        return QStringLiteral("example.http_command");
     case EventType::RawTrafficDecoded:
         return QStringLiteral("traffic.raw_decoded");
     case EventType::PlayerPositionChanged:

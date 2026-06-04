@@ -14,7 +14,6 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
-#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
@@ -71,8 +70,6 @@ private:
 
     QComboBox *m_ifaceCombo = nullptr;
     QPushButton *m_refreshIfacesButton = nullptr;
-    QLineEdit *m_serverIpEdit = nullptr;
-    QSpinBox *m_portSpin = nullptr;
     QPushButton *m_trafficButton = nullptr;
     QLabel *m_statusLabel = nullptr;
     QPushButton *m_showMapButton = nullptr;

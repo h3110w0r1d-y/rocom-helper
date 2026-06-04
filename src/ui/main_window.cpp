@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QLayoutItem>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QSignalBlocker>
 #include <QShowEvent>
@@ -68,10 +69,6 @@ void MainWindow::buildUi()
     m_ifaceCombo->setInsertPolicy(QComboBox::NoInsert);
     m_ifaceCombo->lineEdit()->setPlaceholderText(QStringLiteral("例如 en0"));
     m_refreshIfacesButton = new QPushButton(QStringLiteral("刷新"), this);
-    m_serverIpEdit = new QLineEdit(this);
-    m_portSpin = new QSpinBox(this);
-    m_portSpin->setRange(1, 65535);
-    m_portSpin->setValue(rwtd::DefaultPort);
 
     auto *trafficGroup = new QGroupBox(QStringLiteral("流量监控"), this);
     auto *trafficForm = new QFormLayout(trafficGroup);
@@ -248,7 +245,7 @@ void MainWindow::toggleTraffic()
         m_statusLabel->setText(QStringLiteral("没有可用网卡"));
         return;
     }
-    if (m_capture.start(deviceName, static_cast<quint16>(m_portSpin->value()))) {
+    if (m_capture.start(deviceName)) {
         m_trafficButton->setText(QStringLiteral("停止流量监控"));
         m_statusLabel->setText(QStringLiteral("运行中"));
     }

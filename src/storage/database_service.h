@@ -20,7 +20,6 @@ public:
 
     bool open(const QString &path = {});
     bool isOpen() const;
-    QJsonObject queryExampleState() const;
     QJsonArray queryMapMarkers() const;
     QJsonArray queryPetInfo() const;
     QJsonArray queryBoxInfo() const;
@@ -31,12 +30,10 @@ public slots:
     void deleteMarker(const QString &markerId);
 
 signals:
-    void eventPersisted(const app::AppEvent &event, qint64 id);
     void errorOccurred(const QString &message);
 
 private:
     bool ensureSchema();
-    qint64 insertEvent(const app::AppEvent &event);
     void handlePetInfoEvent(const app::AppEvent &event);
     void handleBoxInfoEvent(const app::AppEvent &event);
     void savePetInfo(int petId, const QJsonObject &data);

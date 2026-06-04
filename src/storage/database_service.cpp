@@ -53,27 +53,6 @@ bool DatabaseService::isOpen() const
     return m_db.isOpen();
 }
 
-QJsonObject DatabaseService::queryExampleState() const
-{
-    QJsonObject result;
-    if (!m_db.isOpen()) {
-        result.insert(QStringLiteral("ok"), false);
-        result.insert(QStringLiteral("error"), QStringLiteral("database is not open"));
-        return result;
-    }
-
-    QSqlQuery query(m_db);
-    if (!query.exec(QStringLiteral("select count(*) from app_events"))) {
-        result.insert(QStringLiteral("ok"), false);
-        result.insert(QStringLiteral("error"), query.lastError().text());
-        return result;
-    }
-    query.next();
-    result.insert(QStringLiteral("ok"), true);
-    result.insert(QStringLiteral("eventCount"), query.value(0).toInt());
-    return result;
-}
-
 QJsonArray DatabaseService::queryMapMarkers() const
 {
     QJsonArray rows;
@@ -149,11 +128,6 @@ void DatabaseService::handleEvent(const AppEvent &event)
         return;
     }
 
-    const qint64 id = insertEvent(event);
-    if (id >= 0) {
-        emit eventPersisted(event, id);
-    }
-
     switch (event.type) {
     case EventType::PetInfoReload:
     case EventType::PetInfoChanged:
@@ -216,22 +190,6 @@ void DatabaseService::deleteMarker(const QString &markerId)
 bool DatabaseService::ensureSchema()
 {
     QSqlQuery query(m_db);
-    const bool ok = query.exec(QStringLiteral(
-        "create table if not exists app_events ("
-        "id integer primary key autoincrement,"
-        "type text not null,"
-        "source text not null,"
-        "name text not null,"
-        "occurred_at text not null,"
-        "payload_json text not null"
-        ")"));
-    if (!ok) {
-        emit errorOccurred(QStringLiteral("初始化 SQLite schema 失败: %1").arg(query.lastError().text()));
-    }
-    if (!ok) {
-        return false;
-    }
-
     const QStringList statements = {
         QStringLiteral(
             "create table if not exists map_markers ("
@@ -262,31 +220,6 @@ bool DatabaseService::ensureSchema()
         }
     }
     return true;
-}
-
-qint64 DatabaseService::insertEvent(const AppEvent &event)
-{
-    if (!m_db.isOpen()) {
-        emit errorOccurred(QStringLiteral("SQLite 未打开，无法写入事件"));
-        return -1;
-    }
-
-    QSqlQuery query(m_db);
-    query.prepare(QStringLiteral(
-        "insert into app_events(type, source, name, occurred_at, payload_json) "
-        "values(:type, :source, :name, :occurred_at, :payload_json)"));
-    query.bindValue(QStringLiteral(":type"), eventTypeName(event.type));
-    query.bindValue(QStringLiteral(":source"), eventSourceName(event.source));
-    query.bindValue(QStringLiteral(":name"), event.name);
-    query.bindValue(QStringLiteral(":occurred_at"), event.occurredAt.toString(Qt::ISODateWithMs));
-    query.bindValue(QStringLiteral(":payload_json"),
-                    QString::fromUtf8(QJsonDocument(event.payload).toJson(QJsonDocument::Compact)));
-
-    if (!query.exec()) {
-        emit errorOccurred(QStringLiteral("写入事件失败: %1").arg(query.lastError().text()));
-        return -1;
-    }
-    return query.lastInsertId().toLongLong();
 }
 
 void DatabaseService::handlePetInfoEvent(const AppEvent &event)

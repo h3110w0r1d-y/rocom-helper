@@ -80,34 +80,6 @@ void HttpServerService::setupRoutes()
         return jsonArrayResponse(m_database != nullptr ? m_database->queryBoxInfo() : QJsonArray());
     });
 
-    // Example query flow: HTTP -> DatabaseService -> HTTP response.
-    m_server.route(QStringLiteral("/api/example-state"), QHttpServerRequest::Method::Get, this, [this] {
-        return jsonResponse(m_database != nullptr ? m_database->queryExampleState()
-                                                  : QJsonObject{{QStringLiteral("ok"), false}});
-    });
-
-    // Example command flow: HTTP -> AppEvent -> Dispatcher -> DB/UI/SSE.
-    m_server.route(QStringLiteral("/api/example-command"), QHttpServerRequest::Method::Post, this,
-                   [this](const QHttpServerRequest &request) {
-                       const QJsonDocument doc = QJsonDocument::fromJson(request.body());
-
-                       AppEvent event;
-                       event.type = EventType::ExampleHttpCommand;
-                       event.source = EventSource::Http;
-                       event.flags = EventFlag::Persist | EventFlag::UpdateUi | EventFlag::PushSse;
-                       event.name = eventTypeName(event.type);
-                       event.payload = doc.isObject()
-                           ? doc.object()
-                           : QJsonObject{{QStringLiteral("rawBody"), QString::fromUtf8(request.body())}};
-                       emit eventCreated(event);
-
-                       return jsonResponse({
-                           {QStringLiteral("ok"), true},
-                           {QStringLiteral("acceptedEvent"), event.name},
-                       });
-                   });
-
-    // Example SSE flow: AppEvent -> SseBroadcaster -> every connected HTTP client.
     m_server.route(QStringLiteral("/events"), QHttpServerRequest::Method::Get, this,
                    [this](QHttpServerResponder &&responder) {
         acceptSseClient(std::move(responder));
