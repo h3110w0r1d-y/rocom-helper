@@ -21,7 +21,7 @@ class HttpServerService : public QObject {
 public:
     explicit HttpServerService(DatabaseService *database, QObject *parent = nullptr);
 
-    bool start(quint16 port = 18080);
+    bool start(quint16 port = 4939);
     void stop();
 
 public slots:

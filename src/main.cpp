@@ -3,14 +3,10 @@
 #include <QDebug>
 #include <QFormLayout>
 #include <QHBoxLayout>
-#include <QHostAddress>
 #include <QJsonDocument>
 #include <QMainWindow>
-#include <QNetworkAddressEntry>
-#include <QNetworkInterface>
 #include <QPushButton>
 #include <QSpinBox>
-#include <QUdpSocket>
 #include <QVBoxLayout>
 
 #include "events/event_dispatcher.h"
@@ -59,82 +55,19 @@ public:
     }
 
 private:
-    struct DefaultNetworkRoute {
-        QString interfaceName;
-        QString localAddress;
-    };
-
-    static DefaultNetworkRoute detectDefaultNetworkRoute()
-    {
-        DefaultNetworkRoute route;
-
-        QUdpSocket socket;
-        socket.connectToHost(QHostAddress(QStringLiteral("8.8.8.8")), 53);
-        const QHostAddress localAddress = socket.localAddress();
-        if (localAddress.isNull() || localAddress.isLoopback()) {
-            return route;
-        }
-
-        route.localAddress = localAddress.toString();
-        const QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
-        for (const QNetworkInterface &interface : interfaces) {
-            const QNetworkInterface::InterfaceFlags flags = interface.flags();
-            if (!flags.testFlag(QNetworkInterface::IsUp)
-                || !flags.testFlag(QNetworkInterface::IsRunning)
-                || flags.testFlag(QNetworkInterface::IsLoopBack)) {
-                continue;
-            }
-
-            for (const QNetworkAddressEntry &entry : interface.addressEntries()) {
-                if (entry.ip() == localAddress) {
-                    route.interfaceName = interface.name();
-                    return route;
-                }
-            }
-        }
-
-        return route;
-    }
-
-    static QString displayNameForDevice(const rwtd::CaptureDeviceInfo &device)
-    {
-        const QNetworkInterface interface = QNetworkInterface::interfaceFromName(device.name);
-        QString label = device.name;
-        if (interface.isValid() && !interface.humanReadableName().isEmpty()
-            && interface.humanReadableName() != device.name) {
-            label += QStringLiteral(" - %1").arg(interface.humanReadableName());
-        } else if (!device.description.isEmpty()) {
-            label += QStringLiteral(" - %1").arg(device.description);
-        }
-        return label;
-    }
-
     void populateDevices()
     {
         const QList<rwtd::CaptureDeviceInfo> devices = rwtd::LiveCaptureService::availableDevices();
-        const DefaultNetworkRoute defaultRoute = detectDefaultNetworkRoute();
-        int defaultDeviceIndex = -1;
-
-        for (const rwtd::CaptureDeviceInfo &device : devices) {
-            const QString label = displayNameForDevice(device);
-            const QString tooltip = device.addresses.isEmpty()
-                ? device.description
-                : device.addresses.join(QStringLiteral(", "));
-            m_deviceCombo->addItem(label, device.name);
-            m_deviceCombo->setItemData(m_deviceCombo->count() - 1, tooltip, Qt::ToolTipRole);
-
-            const bool matchesDefaultName = !defaultRoute.interfaceName.isEmpty()
-                && device.name == defaultRoute.interfaceName;
-            const bool matchesDefaultAddress = !defaultRoute.localAddress.isEmpty()
-                && device.addresses.contains(defaultRoute.localAddress);
-            if (defaultDeviceIndex < 0 && (matchesDefaultName || matchesDefaultAddress)) {
-                defaultDeviceIndex = m_deviceCombo->count() - 1;
+        int defaultIndex = -1;
+        for (int i = 0; i < devices.size(); ++i) {
+            const rwtd::CaptureDeviceInfo &device = devices.at(i);
+            m_deviceCombo->addItem(device.name, device.name);
+            if (device.isDefaultGateway && defaultIndex < 0) {
+                defaultIndex = i;
             }
         }
-
-        if (defaultDeviceIndex >= 0) {
-            m_deviceCombo->setCurrentIndex(defaultDeviceIndex);
-            qInfo().noquote() << QStringLiteral("已默认选择路由网卡: %1").arg(m_deviceCombo->currentText());
+        if (defaultIndex >= 0) {
+            m_deviceCombo->setCurrentIndex(defaultIndex);
         }
     }
 

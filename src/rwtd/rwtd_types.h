@@ -70,6 +70,7 @@ struct CaptureDeviceInfo {
     QString description;
     QStringList addresses;
     bool loopback = false;
+    bool isDefaultGateway = false;
 };
 
 } // namespace rwtd

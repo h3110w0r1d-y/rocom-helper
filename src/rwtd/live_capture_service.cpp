@@ -4,8 +4,12 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QMutexLocker>
 #include <QStandardPaths>
+#include <QTextStream>
+
+#include <cstdio>
 
 #include <Packet.h>
 #include <PcapFilter.h>
@@ -30,6 +34,57 @@ QString defaultKeyPath()
     return QDir(dataDir).filePath(QStringLiteral("traffic_key.json"));
 }
 
+QString defaultRouteInterfaceName()
+{
+#if defined(__APPLE__)
+    FILE *pipe = popen("route -n get default 2>/dev/null", "r");
+    if (pipe == nullptr) {
+        return {};
+    }
+    char buffer[512];
+    QString result;
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        const QString line = QString::fromUtf8(buffer).trimmed();
+        if (line.startsWith(QStringLiteral("interface:"))) {
+            result = line.section(QLatin1Char(':'), 1).trimmed();
+            break;
+        }
+    }
+    pclose(pipe);
+    return result;
+#elif defined(__linux__)
+    QFile routeFile(QStringLiteral("/proc/net/route"));
+    if (!routeFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+    QTextStream in(&routeFile);
+    in.readLine();
+    while (!in.atEnd()) {
+        const QStringList parts = in.readLine().split(QLatin1Char('\t'));
+        if (parts.size() >= 2 && parts.at(1) == QStringLiteral("00000000")) {
+            return parts.at(0);
+        }
+    }
+    return {};
+#else
+    return {};
+#endif
+}
+
+bool isDefaultRouteDevice(const pcpp::PcapLiveDevice *device, const QString &defaultInterface)
+{
+    if (device == nullptr || device->getLoopback()) {
+        return false;
+    }
+    if (device->getDefaultGateway() == pcpp::IPv4Address::Zero) {
+        return false;
+    }
+    if (!defaultInterface.isEmpty()) {
+        return device->getName() == defaultInterface.toStdString();
+    }
+    return true;
+}
+
 } // namespace
 
 LiveCaptureService::LiveCaptureService(QObject *parent)
@@ -48,6 +103,7 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
 {
     QList<CaptureDeviceInfo> result;
     const auto &devices = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDevicesList();
+    const QString defaultInterface = defaultRouteInterfaceName();
     for (const pcpp::PcapLiveDevice *device : devices) {
         CaptureDeviceInfo info;
         info.name = QString::fromStdString(device->getName());
@@ -56,6 +112,7 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
             info.addresses.append(ipToString(address));
         }
         info.loopback = device->getLoopback();
+        info.isDefaultGateway = isDefaultRouteDevice(device, defaultInterface);
         result.append(info);
     }
     return result;

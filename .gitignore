@@ -1,2 +1,4 @@
 /.idea
 /rwtd
+/cmake-build-*
+.DS_Store
