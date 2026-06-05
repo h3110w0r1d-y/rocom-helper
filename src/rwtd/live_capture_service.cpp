@@ -21,6 +21,11 @@
 #include <iphlpapi.h>
 #endif
 
+#if defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
+#include <SystemConfiguration/SystemConfiguration.h>
+#endif
+
 #include <Packet.h>
 #include <PcapFilter.h>
 #include <PcapLiveDevice.h>
@@ -33,6 +38,22 @@ namespace {
 QString ipToString(const pcpp::IPAddress &ip)
 {
     return QString::fromStdString(ip.toString());
+}
+
+QStringList ipv4Addresses(const pcpp::PcapLiveDevice *device)
+{
+    QStringList result;
+    if (device == nullptr) {
+        return result;
+    }
+
+    for (const auto &address : device->getIPAddresses()) {
+        if (!address.isIPv4() || address.isZero()) {
+            continue;
+        }
+        result.append(ipToString(address));
+    }
+    return result;
 }
 
 QString defaultKeyPath()
@@ -153,14 +174,89 @@ QString windowsFriendlyNameForDevice(const QString &deviceName, const QHash<QStr
 }
 #endif
 
-QString captureDeviceDisplayName(
-    const pcpp::PcapLiveDevice *device,
-#if defined(Q_OS_WIN)
-    const QHash<QString, QString> &windowsFriendlyNames
-#else
-    const QHash<QString, QString> &
+#if defined(__APPLE__)
+QString cfStringToQString(CFStringRef value)
+{
+    if (value == nullptr) {
+        return {};
+    }
+
+    const CFIndex length = CFStringGetLength(value);
+    const CFIndex maxSize = CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
+    QByteArray buffer(static_cast<int>(maxSize), Qt::Uninitialized);
+    if (!CFStringGetCString(value, buffer.data(), maxSize, kCFStringEncodingUTF8)) {
+        return {};
+    }
+    return QString::fromUtf8(buffer.constData()).trimmed();
+}
+
+QString macOSInterfaceDisplayName(SCNetworkInterfaceRef interface)
+{
+    QString displayName = cfStringToQString(SCNetworkInterfaceGetLocalizedDisplayName(interface));
+    if (!displayName.isEmpty()) {
+        return displayName;
+    }
+    return cfStringToQString(SCNetworkInterfaceGetInterfaceType(interface));
+}
+
+void rememberMacOSInterfaceName(
+    QHash<QString, QString> &result,
+    const QString &bsdName,
+    const QString &displayName,
+    bool preferred)
+{
+    if (bsdName.isEmpty() || displayName.isEmpty()) {
+        return;
+    }
+    if (preferred || !result.contains(bsdName)) {
+        result.insert(bsdName, displayName);
+    }
+}
+
+QHash<QString, QString> macOSInterfaceFriendlyNames()
+{
+    QHash<QString, QString> result;
+
+    SCPreferencesRef preferences = SCPreferencesCreate(nullptr, CFSTR("roco_helper"), nullptr);
+    if (preferences != nullptr) {
+        CFArrayRef services = SCNetworkServiceCopyAll(preferences);
+        if (services != nullptr) {
+            const CFIndex count = CFArrayGetCount(services);
+            for (CFIndex i = 0; i < count; ++i) {
+                auto *service = static_cast<SCNetworkServiceRef>(CFArrayGetValueAtIndex(services, i));
+                SCNetworkInterfaceRef interface = SCNetworkServiceGetInterface(service);
+                if (interface == nullptr) {
+                    continue;
+                }
+
+                const QString bsdName = cfStringToQString(SCNetworkInterfaceGetBSDName(interface));
+                QString displayName = cfStringToQString(SCNetworkServiceGetName(service));
+                if (displayName.isEmpty()) {
+                    displayName = macOSInterfaceDisplayName(interface);
+                }
+                rememberMacOSInterfaceName(result, bsdName, displayName, SCNetworkServiceGetEnabled(service));
+            }
+            CFRelease(services);
+        }
+        CFRelease(preferences);
+    }
+
+    CFArrayRef interfaces = SCNetworkInterfaceCopyAll();
+    if (interfaces != nullptr) {
+        const CFIndex count = CFArrayGetCount(interfaces);
+        for (CFIndex i = 0; i < count; ++i) {
+            auto *interface = static_cast<SCNetworkInterfaceRef>(CFArrayGetValueAtIndex(interfaces, i));
+            const QString bsdName = cfStringToQString(SCNetworkInterfaceGetBSDName(interface));
+            rememberMacOSInterfaceName(result, bsdName, macOSInterfaceDisplayName(interface), false);
+        }
+        CFRelease(interfaces);
+    }
+
+    return result;
+}
 #endif
-)
+
+QString captureDeviceDisplayName(const pcpp::PcapLiveDevice *device, const QHash<QString, QString> &friendlyNames)
 {
     if (device == nullptr) {
         return {};
@@ -169,7 +265,12 @@ QString captureDeviceDisplayName(
     const QString deviceName = QString::fromStdString(device->getName()).trimmed();
     const QString description = QString::fromStdString(device->getDesc()).trimmed();
 #if defined(Q_OS_WIN)
-    const QString friendlyName = windowsFriendlyNameForDevice(deviceName, windowsFriendlyNames);
+    const QString friendlyName = windowsFriendlyNameForDevice(deviceName, friendlyNames);
+    if (!friendlyName.isEmpty()) {
+        return friendlyName;
+    }
+#elif defined(__APPLE__)
+    const QString friendlyName = friendlyNames.value(deviceName);
     if (!friendlyName.isEmpty()) {
         return friendlyName;
     }
@@ -214,17 +315,20 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
     const auto &devices = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDevicesList();
     const QString defaultInterface = defaultRouteInterfaceName();
 #if defined(Q_OS_WIN)
-    const QHash<QString, QString> windowsFriendlyNames = windowsAdapterFriendlyNames();
+    const QHash<QString, QString> friendlyNames = windowsAdapterFriendlyNames();
+#elif defined(__APPLE__)
+    const QHash<QString, QString> friendlyNames = macOSInterfaceFriendlyNames();
 #else
-    const QHash<QString, QString> windowsFriendlyNames;
+    const QHash<QString, QString> friendlyNames;
 #endif
     for (const pcpp::PcapLiveDevice *device : devices) {
         CaptureDeviceInfo info;
         info.name = QString::fromStdString(device->getName());
         info.description = QString::fromStdString(device->getDesc());
-        info.displayName = captureDeviceDisplayName(device, windowsFriendlyNames);
-        for (const auto &address : device->getIPAddresses()) {
-            info.addresses.append(ipToString(address));
+        info.displayName = captureDeviceDisplayName(device, friendlyNames);
+        info.addresses = ipv4Addresses(device);
+        if (info.addresses.isEmpty()) {
+            continue;
         }
         info.loopback = device->getLoopback();
         info.isDefaultGateway = isDefaultRouteDevice(device, defaultInterface);
