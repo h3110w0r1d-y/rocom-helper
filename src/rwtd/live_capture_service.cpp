@@ -13,12 +13,6 @@
 
 #include <cstdio>
 
-#include <Packet.h>
-#include <PcapFilter.h>
-#include <PcapLiveDevice.h>
-#include <PcapLiveDeviceList.h>
-#include <TcpReassembly.h>
-
 #if defined(Q_OS_WIN)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -26,6 +20,12 @@
 #include <winsock2.h>
 #include <iphlpapi.h>
 #endif
+
+#include <Packet.h>
+#include <PcapFilter.h>
+#include <PcapLiveDevice.h>
+#include <PcapLiveDeviceList.h>
+#include <TcpReassembly.h>
 
 namespace rwtd {
 namespace {

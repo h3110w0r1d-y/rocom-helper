@@ -214,7 +214,7 @@ void MainWindow::populateDevices()
             label = device.name;
         }
         if (!device.addresses.isEmpty()) {
-            label += QStringLiteral(" (%1)").arg(device.addresses.join(QStringLiteral(", ")));
+            label += QStringLiteral(" (%1)").arg(device.addresses.constFirst());
         }
         m_ifaceCombo->addItem(label, device.name);
         m_ifaceCombo->setItemData(i, device.name, Qt::ToolTipRole);
