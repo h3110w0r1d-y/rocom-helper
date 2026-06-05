@@ -4,6 +4,7 @@
 
 #include <QByteArray>
 #include <QHttpServer>
+#include <QHttpServerRequest>
 #include <QHttpServerResponder>
 #include <QJsonArray>
 #include <QObject>
@@ -35,6 +36,7 @@ signals:
 
 private:
     void setupRoutes();
+    QHttpServerResponse staticWebResponse(const QHttpServerRequest &request) const;
     QHttpServerResponse jsonResponse(const QJsonObject &object) const;
     QHttpServerResponse jsonArrayResponse(const QJsonArray &array) const;
     void acceptSseClient(QHttpServerResponder &&responder);

@@ -1,5 +1,7 @@
+.DS_Store
 /.idea
 /rwtd
 /cmake-build-*
-.DS_Store
 /legacy
+/resources/web
+/protos

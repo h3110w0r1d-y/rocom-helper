@@ -1,5 +1,6 @@
 #include "main_window.h"
 
+#include <QDesktopServices>
 #include <QFileDialog>
 #include <QCloseEvent>
 #include <QFormLayout>
@@ -12,6 +13,7 @@
 #include <QMessageBox>
 #include <QSignalBlocker>
 #include <QShowEvent>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QXmlStreamReader>
 
@@ -116,9 +118,11 @@ void MainWindow::buildUi()
     mapLayout->addWidget(m_clearPathButton, 7, 1);
     mapLayout->addWidget(m_markerFilterPanel, 8, 0, 1, 2);
 
-    auto *s2Group = new QGroupBox(QStringLiteral("S2赛季功能"), this);
+    auto *s2Group = new QGroupBox(QStringLiteral("其他功能"), this);
     auto *s2Layout = new QGridLayout(s2Group);
+    m_petFilterButton = new QPushButton(QStringLiteral("宠物筛选"), this);
     m_showCatchButton = new QPushButton(QStringLiteral("捕捉日志"), this);
+    s2Layout->addWidget(m_petFilterButton, 0, 0);
     s2Layout->addWidget(m_showCatchButton, 0, 1);
 
     auto *layout = new QVBoxLayout(this);
@@ -136,6 +140,7 @@ void MainWindow::connectSignals()
     connect(m_refreshIfacesButton, &QPushButton::clicked, this, &MainWindow::populateDevices);
 
     connect(m_showMapButton, &QPushButton::clicked, this, &MainWindow::showMap);
+    connect(m_petFilterButton, &QPushButton::clicked, this, &MainWindow::openPetFilter);
     connect(m_showCatchButton, &QPushButton::clicked, this, &MainWindow::showCatch);
     connect(m_topCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setAlwaysOnTop);
     connect(m_miniMapCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setMiniMapMode);
@@ -273,6 +278,14 @@ void MainWindow::showCatch()
     m_catchWindow->show();
     m_catchWindow->raise();
     m_catchWindow->activateWindow();
+}
+
+void MainWindow::openPetFilter()
+{
+    const QUrl url(QStringLiteral("http://127.0.0.1:4939/"));
+    if (!QDesktopServices::openUrl(url)) {
+        m_statusLabel->setText(QStringLiteral("无法打开宠物筛选页面: %1").arg(url.toString()));
+    }
 }
 
 void MainWindow::importPathOverlay()

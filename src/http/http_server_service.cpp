@@ -2,9 +2,12 @@
 
 #include "storage/database_service.h"
 
+#include <QDir>
+#include <QFile>
 #include <QHostAddress>
 #include <QHttpServerRequest>
 #include <QJsonDocument>
+#include <QMimeDatabase>
 
 #include <utility>
 
@@ -65,6 +68,16 @@ void HttpServerService::rememberLastSsePayload(const QByteArray &payload)
 
 void HttpServerService::setupRoutes()
 {
+    m_server.setMissingHandler(this, [this](const QHttpServerRequest &request,
+                                            QHttpServerResponder &responder) {
+        if (request.url().path().startsWith(QStringLiteral("/api"))) {
+            responder.write(QHttpServerResponder::StatusCode::NotFound);
+            return;
+        }
+
+        responder.sendResponse(staticWebResponse(request));
+    });
+
     m_server.route(QStringLiteral("/api/health"), QHttpServerRequest::Method::Get, this, [this] {
         return jsonResponse({
             {QStringLiteral("ok"), true},
@@ -88,6 +101,37 @@ void HttpServerService::setupRoutes()
                    [this](QHttpServerResponder &&responder) {
         acceptSseClient(std::move(responder));
     });
+}
+
+QHttpServerResponse HttpServerService::staticWebResponse(const QHttpServerRequest &request) const
+{
+    static constexpr auto indexResourcePath = ":/web/index.html";
+
+    QString path = QDir::cleanPath(request.url().path());
+    if (path == QStringLiteral(".") || path == QStringLiteral("/")) {
+        path = QStringLiteral("/index.html");
+    }
+
+    QString resourcePath = QStringLiteral(":/web") + path;
+    QFile resourceFile(resourcePath);
+    if (!resourceFile.exists() || !resourceFile.open(QIODevice::ReadOnly)) {
+        resourcePath = QString::fromLatin1(indexResourcePath);
+        resourceFile.setFileName(resourcePath);
+        if (!resourceFile.open(QIODevice::ReadOnly)) {
+            return QHttpServerResponse(QHttpServerResponse::StatusCode::NotFound);
+        }
+    }
+
+    QByteArray mimeType = QMimeDatabase().mimeTypeForFile(resourcePath).name().toUtf8();
+    if (resourcePath.endsWith(QStringLiteral(".html"), Qt::CaseInsensitive)) {
+        mimeType = QByteArrayLiteral("text/html; charset=utf-8");
+    } else if (resourcePath.endsWith(QStringLiteral(".js"), Qt::CaseInsensitive)) {
+        mimeType = QByteArrayLiteral("text/javascript; charset=utf-8");
+    } else if (resourcePath.endsWith(QStringLiteral(".css"), Qt::CaseInsensitive)) {
+        mimeType = QByteArrayLiteral("text/css; charset=utf-8");
+    }
+
+    return QHttpServerResponse(mimeType, resourceFile.readAll());
 }
 
 QHttpServerResponse HttpServerService::jsonResponse(const QJsonObject &object) const

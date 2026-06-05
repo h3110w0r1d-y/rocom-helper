@@ -42,6 +42,7 @@ private:
     void onTrafficError(const QString &message);
     void showMap();
     void showCatch();
+    void openPetFilter();
     void importPathOverlay();
     QStringList extractSvgPaths(const QString &filePath) const;
     void onBaseStateLoaded(const BaseState &state);
@@ -82,6 +83,7 @@ private:
     QPushButton *m_importPathButton = nullptr;
     QPushButton *m_clearPathButton = nullptr;
     MarkerFilterPanel *m_markerFilterPanel = nullptr;
+    QPushButton *m_petFilterButton = nullptr;
     QPushButton *m_showCatchButton = nullptr;
     QTimer m_saveTimer;
     QList<QMessageBox *> m_alertWindows;
