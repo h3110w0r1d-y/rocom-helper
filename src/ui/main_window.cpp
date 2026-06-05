@@ -59,7 +59,7 @@ void MainWindow::buildUi()
     m_ifaceCombo = new QComboBox(this);
     m_ifaceCombo->setEditable(true);
     m_ifaceCombo->setInsertPolicy(QComboBox::NoInsert);
-    m_ifaceCombo->lineEdit()->setPlaceholderText(QStringLiteral("例如 en0"));
+    m_ifaceCombo->lineEdit()->setPlaceholderText(QStringLiteral("选择网卡或输入捕获名"));
     m_refreshIfacesButton = new QPushButton(QStringLiteral("刷新"), this);
 
     auto *trafficGroup = new QGroupBox(QStringLiteral("流量监控"), this);
@@ -206,7 +206,18 @@ void MainWindow::populateDevices()
     m_ifaceCombo->clear();
     for (int i = 0; i < devices.size(); ++i) {
         const rwtd::CaptureDeviceInfo &device = devices.at(i);
-        m_ifaceCombo->addItem(device.name, device.name);
+        QString label = device.displayName.trimmed();
+        if (label.isEmpty()) {
+            label = device.description.trimmed();
+        }
+        if (label.isEmpty()) {
+            label = device.name;
+        }
+        if (!device.addresses.isEmpty()) {
+            label += QStringLiteral(" (%1)").arg(device.addresses.join(QStringLiteral(", ")));
+        }
+        m_ifaceCombo->addItem(label, device.name);
+        m_ifaceCombo->setItemData(i, device.name, Qt::ToolTipRole);
         if (device.isDefaultGateway && defaultIndex < 0) {
             defaultIndex = i;
         }

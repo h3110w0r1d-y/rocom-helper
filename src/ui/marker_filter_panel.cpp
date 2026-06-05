@@ -1,6 +1,7 @@
 #include "marker_filter_panel.h"
 
 #include <QHeaderView>
+#include <QHash>
 #include <QIcon>
 #include <QSignalBlocker>
 
@@ -10,24 +11,6 @@ namespace {
 constexpr int MarkerTypeRole = Qt::UserRole + 1;
 constexpr int MarkerSubtypeRole = Qt::UserRole + 2;
 constexpr int IsTypeItemRole = Qt::UserRole + 3;
-
-Qt::CheckState parentStateFor(const MarkerTypeConfig &markerType)
-{
-    if (!markerType.visible) {
-        return Qt::Unchecked;
-    }
-    if (markerType.subtypes.isEmpty()) {
-        return Qt::Checked;
-    }
-
-    int visibleCount = 0;
-    for (const MarkerSubtypeConfig &subtype : markerType.subtypes) {
-        if (subtype.visible) {
-            ++visibleCount;
-        }
-    }
-    return visibleCount == markerType.subtypes.size() ? Qt::Checked : Qt::PartiallyChecked;
-}
 
 } // namespace
 
@@ -51,6 +34,15 @@ void MarkerFilterPanel::setMarkerTypes(const MarkerTypeMap &markerTypes)
 {
     QSignalBlocker blocker(this);
     m_updating = true;
+
+    QHash<QString, bool> expandedStates;
+    for (int index = 0; index < topLevelItemCount(); ++index) {
+        QTreeWidgetItem *item = topLevelItem(index);
+        if (item != nullptr) {
+            expandedStates.insert(item->data(0, MarkerTypeRole).toString(), item->isExpanded());
+        }
+    }
+
     clear();
 
     for (const MarkerTypeConfig &markerType : markerTypes) {
@@ -60,7 +52,7 @@ void MarkerFilterPanel::setMarkerTypes(const MarkerTypeMap &markerTypes)
         typeItem->setData(0, MarkerTypeRole, markerType.key);
         typeItem->setData(0, IsTypeItemRole, true);
         typeItem->setFlags(typeItem->flags() | Qt::ItemIsUserCheckable);
-        typeItem->setCheckState(0, parentStateFor(markerType));
+        typeItem->setCheckState(0, markerType.visible ? Qt::Checked : Qt::Unchecked);
 
         for (const MarkerSubtypeConfig &subtype : markerType.subtypes) {
             auto *subtypeItem = new QTreeWidgetItem(typeItem);
@@ -74,7 +66,7 @@ void MarkerFilterPanel::setMarkerTypes(const MarkerTypeMap &markerTypes)
         }
 
         if (typeItem->childCount() > 0) {
-            typeItem->setExpanded(true);
+            typeItem->setExpanded(markerType.visible && expandedStates.value(markerType.key, true));
             updateChildrenEnabled(typeItem, markerType.visible);
         }
     }
@@ -96,13 +88,10 @@ void MarkerFilterPanel::onItemChanged(QTreeWidgetItem *item, int column)
 
     if (isTypeItem) {
         const Qt::CheckState state = item->checkState(0);
-        if (state == Qt::PartiallyChecked) {
-            return;
-        }
         const bool visible = state == Qt::Checked;
         m_updating = true;
         updateChildrenEnabled(item, visible);
-        updateParentCheckState(item);
+        item->setExpanded(visible);
         m_updating = false;
         emit typeVisibilityChanged(markerType, visible);
         return;
@@ -110,32 +99,7 @@ void MarkerFilterPanel::onItemChanged(QTreeWidgetItem *item, int column)
 
     const QString subtype = item->data(0, MarkerSubtypeRole).toString();
     const bool visible = item->checkState(0) == Qt::Checked;
-    m_updating = true;
-    updateParentCheckState(item->parent());
-    m_updating = false;
     emit subtypeVisibilityChanged(markerType, subtype, visible);
-}
-
-void MarkerFilterPanel::updateParentCheckState(QTreeWidgetItem *parentItem)
-{
-    if (parentItem == nullptr || !parentItem->data(0, IsTypeItemRole).toBool()) {
-        return;
-    }
-    if (parentItem->checkState(0) == Qt::Unchecked) {
-        return;
-    }
-    if (parentItem->childCount() == 0) {
-        parentItem->setCheckState(0, Qt::Checked);
-        return;
-    }
-
-    int checkedCount = 0;
-    for (int index = 0; index < parentItem->childCount(); ++index) {
-        if (parentItem->child(index)->checkState(0) == Qt::Checked) {
-            ++checkedCount;
-        }
-    }
-    parentItem->setCheckState(0, checkedCount == parentItem->childCount() ? Qt::Checked : Qt::PartiallyChecked);
 }
 
 void MarkerFilterPanel::updateChildrenEnabled(QTreeWidgetItem *parentItem, bool enabled)

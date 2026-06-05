@@ -4,7 +4,6 @@
 #include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
-#include <QSet>
 #include <QtMath>
 
 #include <cmath>
@@ -130,16 +129,36 @@ QString decodedPetName(const QJsonObject &petData)
     return rawName;
 }
 
-const QSet<int> &boxIds()
+const QHash<int, QString> &boxTypes()
 {
-    static const QSet<int> ids = {
-        55519, 55504, 55531, 55532, 55533, 65182, 52021, 52022, 52023, 52024, 52025,
-        52026, 52027, 52028, 52029, 52030, 52031, 52032, 52033, 55134, 55135, 55136,
-        55137, 55138, 55164, 55165, 55166, 55167, 55168, 55169, 55170, 55171, 55172,
-        55173, 55174, 55175, 55176, 55177, 55178, 55179, 55180, 55181, 55182, 55183,
-        55184,
+    static const QHash<int, QString> types = {
+        {55519, QStringLiteral("普通")}, {55504, QStringLiteral("普通")},
+        {55531, QStringLiteral("普通")}, {55164, QStringLiteral("普通")},
+
+        {55532, QStringLiteral("华丽")}, {65182, QStringLiteral("华丽")},
+        {52021, QStringLiteral("华丽")}, {52022, QStringLiteral("华丽")},
+        {52023, QStringLiteral("华丽")}, {52024, QStringLiteral("华丽")},
+        {52025, QStringLiteral("华丽")}, {52026, QStringLiteral("华丽")},
+        {52027, QStringLiteral("华丽")}, {52028, QStringLiteral("华丽")},
+        {52029, QStringLiteral("华丽")}, {52030, QStringLiteral("华丽")},
+        {52031, QStringLiteral("华丽")}, {52032, QStringLiteral("华丽")},
+        {52033, QStringLiteral("华丽")}, {55134, QStringLiteral("华丽")},
+        {55135, QStringLiteral("华丽")}, {55136, QStringLiteral("华丽")},
+        {55137, QStringLiteral("华丽")}, {55138, QStringLiteral("华丽")},
+        {55165, QStringLiteral("华丽")}, {55167, QStringLiteral("华丽")},
+        {55168, QStringLiteral("华丽")}, {55169, QStringLiteral("华丽")},
+        {55170, QStringLiteral("华丽")}, {55171, QStringLiteral("华丽")},
+        {55172, QStringLiteral("华丽")}, {55173, QStringLiteral("华丽")},
+        {55174, QStringLiteral("华丽")}, {55175, QStringLiteral("华丽")},
+        {55176, QStringLiteral("华丽")}, {55177, QStringLiteral("华丽")},
+        {55178, QStringLiteral("华丽")}, {55179, QStringLiteral("华丽")},
+        {55180, QStringLiteral("华丽")}, {55181, QStringLiteral("华丽")},
+        {55182, QStringLiteral("华丽")}, {55183, QStringLiteral("华丽")},
+        {55184, QStringLiteral("华丽")},
+
+        {55533, QStringLiteral("贵重")}, {55166, QStringLiteral("贵重")},
     };
-    return ids;
+    return types;
 }
 
 const QHash<int, QString> &flowerTypes()
@@ -297,8 +316,11 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
 
             if (isOreConfigId(npcConfigId)) {
                 emitBusinessEvent(EventType::MapMarkerAdded, markerPayload(refreshPoint, QStringLiteral("ore"), pos));
-            } else if (boxIds().contains(npcConfigId)) {
-                emitBusinessEvent(EventType::MapMarkerAdded, markerPayload(refreshPoint, QStringLiteral("chest"), pos, true));
+            } else if (boxTypes().contains(npcConfigId)) {
+                QJsonObject extra{
+                    {QStringLiteral("type"), boxTypes().value(npcConfigId)},
+                };
+                emitBusinessEvent(EventType::MapMarkerAdded, markerPayload(refreshPoint, QStringLiteral("chest"), pos, true, extra));
             } else if (flowerTypes().contains(npcConfigId)) {
                 QJsonObject extra{
                     {QStringLiteral("actor_id"), stringValue(base, {"actor_id"})},

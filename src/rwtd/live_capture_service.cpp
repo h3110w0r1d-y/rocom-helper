@@ -3,8 +3,10 @@
 #include "record_decoder.h"
 
 #include <QCoreApplication>
+#include <QByteArray>
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QMutexLocker>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -16,6 +18,14 @@
 #include <PcapLiveDevice.h>
 #include <PcapLiveDeviceList.h>
 #include <TcpReassembly.h>
+
+#if defined(Q_OS_WIN)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <iphlpapi.h>
+#endif
 
 namespace rwtd {
 namespace {
@@ -71,6 +81,105 @@ QString defaultRouteInterfaceName()
 #endif
 }
 
+#if defined(Q_OS_WIN)
+QString normalizedWindowsAdapterGuid(QString value)
+{
+    value = value.trimmed();
+    const qsizetype openBrace = value.indexOf(QLatin1Char('{'));
+    const qsizetype closeBrace = value.indexOf(QLatin1Char('}'), openBrace + 1);
+    if (openBrace >= 0 && closeBrace > openBrace) {
+        value = value.mid(openBrace + 1, closeBrace - openBrace - 1);
+    }
+    value.remove(QLatin1Char('{'));
+    value.remove(QLatin1Char('}'));
+    return value.toUpper();
+}
+
+QHash<QString, QString> windowsAdapterFriendlyNames()
+{
+    QHash<QString, QString> result;
+    ULONG bufferLength = 15 * 1024;
+    QByteArray buffer(static_cast<int>(bufferLength), Qt::Uninitialized);
+
+    auto *addresses = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buffer.data());
+    ULONG status = GetAdaptersAddresses(
+        AF_UNSPEC,
+        GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+        nullptr,
+        addresses,
+        &bufferLength);
+    if (status == ERROR_BUFFER_OVERFLOW) {
+        buffer.resize(static_cast<int>(bufferLength));
+        addresses = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buffer.data());
+        status = GetAdaptersAddresses(
+            AF_UNSPEC,
+            GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+            nullptr,
+            addresses,
+            &bufferLength);
+    }
+    if (status != NO_ERROR) {
+        return result;
+    }
+
+    for (auto *adapter = addresses; adapter != nullptr; adapter = adapter->Next) {
+        const QString guid = adapter->AdapterName == nullptr
+            ? QString()
+            : normalizedWindowsAdapterGuid(QString::fromLocal8Bit(adapter->AdapterName));
+        if (guid.isEmpty()) {
+            continue;
+        }
+
+        QString friendlyName = adapter->FriendlyName == nullptr
+            ? QString()
+            : QString::fromWCharArray(adapter->FriendlyName).trimmed();
+        if (friendlyName.isEmpty() && adapter->Description != nullptr) {
+            friendlyName = QString::fromWCharArray(adapter->Description).trimmed();
+        }
+        if (!friendlyName.isEmpty()) {
+            result.insert(guid, friendlyName);
+        }
+    }
+    return result;
+}
+
+QString windowsFriendlyNameForDevice(const QString &deviceName, const QHash<QString, QString> &friendlyNames)
+{
+    const QString guid = normalizedWindowsAdapterGuid(deviceName);
+    if (guid.isEmpty()) {
+        return {};
+    }
+    return friendlyNames.value(guid);
+}
+#endif
+
+QString captureDeviceDisplayName(
+    const pcpp::PcapLiveDevice *device,
+#if defined(Q_OS_WIN)
+    const QHash<QString, QString> &windowsFriendlyNames
+#else
+    const QHash<QString, QString> &
+#endif
+)
+{
+    if (device == nullptr) {
+        return {};
+    }
+
+    const QString deviceName = QString::fromStdString(device->getName()).trimmed();
+    const QString description = QString::fromStdString(device->getDesc()).trimmed();
+#if defined(Q_OS_WIN)
+    const QString friendlyName = windowsFriendlyNameForDevice(deviceName, windowsFriendlyNames);
+    if (!friendlyName.isEmpty()) {
+        return friendlyName;
+    }
+#endif
+    if (!description.isEmpty()) {
+        return description;
+    }
+    return deviceName;
+}
+
 bool isDefaultRouteDevice(const pcpp::PcapLiveDevice *device, const QString &defaultInterface)
 {
     if (device == nullptr || device->getLoopback()) {
@@ -104,10 +213,16 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
     QList<CaptureDeviceInfo> result;
     const auto &devices = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDevicesList();
     const QString defaultInterface = defaultRouteInterfaceName();
+#if defined(Q_OS_WIN)
+    const QHash<QString, QString> windowsFriendlyNames = windowsAdapterFriendlyNames();
+#else
+    const QHash<QString, QString> windowsFriendlyNames;
+#endif
     for (const pcpp::PcapLiveDevice *device : devices) {
         CaptureDeviceInfo info;
         info.name = QString::fromStdString(device->getName());
         info.description = QString::fromStdString(device->getDesc());
+        info.displayName = captureDeviceDisplayName(device, windowsFriendlyNames);
         for (const auto &address : device->getIPAddresses()) {
             info.addresses.append(ipToString(address));
         }

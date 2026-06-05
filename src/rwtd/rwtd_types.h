@@ -67,6 +67,7 @@ struct DecodedAction {
 
 struct CaptureDeviceInfo {
     QString name;
+    QString displayName;
     QString description;
     QStringList addresses;
     bool loopback = false;

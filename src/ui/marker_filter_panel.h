@@ -20,7 +20,6 @@ signals:
 
 private:
     void onItemChanged(QTreeWidgetItem *item, int column);
-    void updateParentCheckState(QTreeWidgetItem *parentItem);
     void updateChildrenEnabled(QTreeWidgetItem *parentItem, bool enabled);
     static QString subtypeDisplayName(const QString &subtype);
 

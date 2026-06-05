@@ -40,13 +40,17 @@ target_include_directories(rwtd PUBLIC
 )
 
 target_link_libraries(rwtd
-    PUBLIC
+        PUBLIC
         Qt6::Core
         protobuf::libprotobuf
-    PRIVATE
+        PRIVATE
         OpenSSL::Crypto
         PcapPlusPlus::Pcap++
 )
+
+if(WIN32)
+    target_link_libraries(rwtd PRIVATE iphlpapi)
+endif()
 
 target_compile_features(rwtd PUBLIC cxx_std_17)
 
@@ -56,10 +60,17 @@ elseif(MINGW)
     target_compile_options(rwtd PRIVATE -Wa,-mbig-obj)
 endif()
 
-qt_add_executable(roco_helper
-        src/main.cpp
-        ${APP_SOURCES}
-)
+if(APPLE)
+    qt_add_executable(roco_helper MACOSX_BUNDLE
+            src/main.cpp
+            ${APP_SOURCES}
+    )
+else()
+    qt_add_executable(roco_helper WIN32
+            src/main.cpp
+            ${APP_SOURCES}
+    )
+endif()
 
 qt_add_resources(roco_helper "app_resources"
         PREFIX "/"
@@ -102,3 +113,9 @@ elseif(WIN32)
         )
     endif()
 endif()
+
+if(MSVC)
+    target_compile_options(rwtd PRIVATE /bigobj)
+endif()
+
+set(ROCO_DIST_DIR "${CMAKE_BINARY_DIR}/dist")
