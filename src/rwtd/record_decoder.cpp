@@ -1,15 +1,11 @@
 #include "record_decoder.h"
 
+#include "aes_128_cbc.h"
+
 #include <QtEndian>
-
-#include <openssl/evp.h>
-
-#include <memory>
 
 namespace rwtd {
 namespace {
-
-using EvpCipherCtxPtr = std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>;
 
 quint16 readBe16(const QByteArray &data, qsizetype offset)
 {
@@ -77,43 +73,27 @@ std::optional<DecryptedRecord> DataRecordDecoder::decryptAndParse(
 
 QByteArray DataRecordDecoder::decryptDataBody(const QByteArray &key, const QByteArray &body)
 {
-    if (key.size() != 16 || body.size() < 32) {
+    if (key.size() != AES_KEY_SIZE || body.size() < AES_BLOCK_SIZE * 2) {
         return {};
     }
 
-    const QByteArray iv = body.left(16);
-    const QByteArray ciphertext = body.mid(16);
-    if (ciphertext.size() % 16 != 0) {
+    const QByteArray iv = body.left(AES_BLOCK_SIZE);
+    const QByteArray ciphertext = body.mid(AES_BLOCK_SIZE);
+    if (ciphertext.size() % AES_BLOCK_SIZE != 0) {
         return {};
     }
 
-    EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
-    if (!ctx) {
-        return {};
-    }
-    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_128_cbc(), nullptr,
-                           reinterpret_cast<const uchar *>(key.constData()),
-                           reinterpret_cast<const uchar *>(iv.constData())) != 1) {
-        return {};
-    }
-    EVP_CIPHER_CTX_set_padding(ctx.get(), 0);
+    AES_CTX ctx;
+    AES_DecryptInit(&ctx,
+                    reinterpret_cast<const uchar *>(key.constData()),
+                    reinterpret_cast<const uchar *>(iv.constData()));
 
-    QByteArray plaintext(ciphertext.size() + EVP_CIPHER_block_size(EVP_aes_128_cbc()), Qt::Uninitialized);
-    int outLength = 0;
-    int finalLength = 0;
-    if (EVP_DecryptUpdate(ctx.get(),
-                          reinterpret_cast<uchar *>(plaintext.data()),
-                          &outLength,
-                          reinterpret_cast<const uchar *>(ciphertext.constData()),
-                          ciphertext.size()) != 1) {
-        return {};
+    QByteArray plaintext(ciphertext.size(), Qt::Uninitialized);
+    const auto *ciphertextData = reinterpret_cast<const uchar *>(ciphertext.constData());
+    auto *plaintextData = reinterpret_cast<uchar *>(plaintext.data());
+    for (qsizetype offset = 0; offset < ciphertext.size(); offset += AES_BLOCK_SIZE) {
+        AES_Decrypt(&ctx, ciphertextData + offset, plaintextData + offset);
     }
-    if (EVP_DecryptFinal_ex(ctx.get(),
-                            reinterpret_cast<uchar *>(plaintext.data()) + outLength,
-                            &finalLength) != 1) {
-        return {};
-    }
-    plaintext.resize(outLength + finalLength);
     return plaintext;
 }
 

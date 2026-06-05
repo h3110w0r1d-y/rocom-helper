@@ -2,10 +2,9 @@ cmake_minimum_required(VERSION 3.27)
 
 project(roco_helper LANGUAGES CXX)
 
-# 项目依赖：Qt 用于应用和界面，protobuf、OpenSSL、PcapPlusPlus
+# 项目依赖：Qt 用于应用和界面，protobuf、PcapPlusPlus
 # 由 rwtd 抓包/解码层使用。
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Sql HttpServer Network)
-find_package(OpenSSL REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
 find_package(PcapPlusPlus REQUIRED CONFIG)
 
@@ -50,7 +49,6 @@ target_link_libraries(rwtd
         Qt6::Core
         protobuf::libprotobuf
         PRIVATE
-        OpenSSL::Crypto
         PcapPlusPlus::Pcap++
 )
 
