@@ -65,10 +65,7 @@ endif()
 
 target_compile_features(rwtd PUBLIC cxx_std_17)
 
-if(MSVC)
-    # 生成的 protobuf 源码较大，MSVC 需要放宽对象文件大小限制。
-    target_compile_options(rwtd PRIVATE /bigobj)
-elseif(MINGW)
+if(MINGW)
     target_compile_options(rwtd PRIVATE -Wa,-mbig-obj)
 endif()
 
@@ -104,10 +101,13 @@ target_link_libraries(roco_helper PRIVATE
         rwtd
 )
 
-target_compile_options(roco_helper PRIVATE
-        $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/O2>
-        $<$<AND:$<CONFIG:Release>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-O2>
-)
+if(WIN32)
+    # 静态 Qt 会自动导入 SQL 插件；本项目只使用 SQLite，排除 ODBC 可避免额外动态链接切换。
+    qt_import_plugins(roco_helper
+            EXCLUDE Qt6::QODBCDriverPlugin
+    )
+endif()
+
 target_compile_features(roco_helper PRIVATE cxx_std_17)
 
 # 仅 Release 启用的链接体积优化。
@@ -116,22 +116,15 @@ if(APPLE)
             $<$<CONFIG:Release>:-Wl,-dead_strip>
     )
 elseif(WIN32)
-    if(MSVC)
+    if(MINGW)
         target_link_options(roco_helper PRIVATE
-                $<$<CONFIG:Release>:/OPT:REF>
-                $<$<CONFIG:Release>:/OPT:ICF>
-        )
-    else()
-        target_link_options(roco_helper PRIVATE
+                -static
+                -static-libgcc
+                -static-libstdc++
                 $<$<CONFIG:Release>:-Wl,--gc-sections>
                 $<$<CONFIG:Release>:-s>
         )
     endif()
-endif()
-
-if(MSVC)
-    # 大部分大型生成源码位于 rwtd，因此这里也保留 /bigobj。
-    target_compile_options(rwtd PRIVATE /bigobj)
 endif()
 
 set(ROCO_DIST_DIR "${CMAKE_BINARY_DIR}/dist")
@@ -141,11 +134,16 @@ if(WIN32)
     set_target_properties(roco_helper PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY_RELEASE "${ROCO_DIST_DIR}"
     )
+    add_custom_command(TARGET roco_helper PRE_LINK
+            COMMAND "${CMAKE_COMMAND}" -E rm -rf "${ROCO_DIST_DIR}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${ROCO_DIST_DIR}"
+            VERBATIM
+    )
 endif()
 
 # 平台部署：
 # - macOS 保留 .app bundle，并由 macdeployqt 修正 Qt frameworks/plugins。
-# - Windows 的 exe 直接生成到扁平 dist 目录，构建后补齐运行时 DLL 和 Qt 插件。
+# - Windows 当前使用静态 Qt，exe 直接生成到扁平 dist 目录。
 if(APPLE)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
@@ -157,28 +155,6 @@ if(APPLE)
 
     add_custom_command(TARGET roco_helper POST_BUILD
             COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:roco_helper>"
-            VERBATIM
-    )
-elseif(WIN32)
-    get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
-    get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
-    find_program(WINDEPLOYQT_EXECUTABLE
-            NAMES windeployqt
-            HINTS "${QT_BIN_DIR}"
-            REQUIRED
-    )
-
-    add_custom_command(TARGET roco_helper POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E make_directory "${ROCO_DIST_DIR}"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                    $<TARGET_RUNTIME_DLLS:roco_helper>
-                    "${ROCO_DIST_DIR}"
-            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
-                    "$<$<CONFIG:Debug>:--debug>$<$<NOT:$<CONFIG:Debug>>:--release>"
-                    --compiler-runtime
-                    --dir "${ROCO_DIST_DIR}"
-                    "${ROCO_DIST_DIR}/$<TARGET_FILE_NAME:roco_helper>"
-            COMMAND_EXPAND_LISTS
             VERBATIM
     )
 endif()
