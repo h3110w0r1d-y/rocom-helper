@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QDebug>
 #include <QHash>
 #include <QJsonArray>
 #include <QtMath>
@@ -462,6 +463,12 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         return;
     }
 
+    if (messageName == QStringLiteral("ZoneBattleFinishNotify")
+        || messageName == QStringLiteral("ZoneBattleForceFinishNotify")) {
+        emitUiEvent(EventType::BoxHintUpdated, {{QStringLiteral("clear"), true}});
+        return;
+    }
+
     if (messageName == QStringLiteral("ZoneBattlePerformStartNotify")) {
         const QJsonObject performCmd = objectForKeys(payload, {"perform_cmd"});
         const QJsonArray performInfo = arrayForKeys(performCmd, {"perform_info"});
@@ -471,7 +478,7 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
                 continue;
             }
             const QJsonObject shieldBreak = objectForKeys(perform, {"box_shield_break"});
-            if (!boolValue(shieldBreak, {"is_shiny"})) {
+            if (shieldBreak.isEmpty()) {
                 continue;
             }
             const int attrType = intValue(shieldBreak, {"pet_attr_type"});
@@ -483,14 +490,45 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
                 {5, QStringLiteral("魔防")},
                 {6, QStringLiteral("速度")},
             }.value(attrType, QStringLiteral("unknow"));
-            emitBusinessEvent(EventType::ShinyPetDetected, {
-                {QStringLiteral("title"), QStringLiteral("异色提示")},
-                {QStringLiteral("message"), QStringLiteral("发现异色！！ +%1").arg(attrName)},
+
+            const bool isShiny = boolValue(shieldBreak, {"is_shiny"});
+            const bool isFantastic = boolValue(shieldBreak, {"is_fantastic"});
+            const bool isNightmare = boolValue(shieldBreak, {"is_nightmare"});
+            const int petRarityType = intValue(shieldBreak, {"pet_rarity_type"});
+            const int petMutationType = intValue(shieldBreak, {"pet_mutation_type"});
+            const QString displayKind = isShiny
+                ? QStringLiteral("异色")
+                : isFantastic ? QStringLiteral("奇异")
+                              : isNightmare ? QStringLiteral("污染") : QStringLiteral("普通");
+            const QString logKind = isShiny
+                ? QStringLiteral("异色！！")
+                : isFantastic ? QStringLiteral("奇异")
+                              : isNightmare ? QStringLiteral("污染") : QStringLiteral("普通");
+
+            qInfo().noquote()
+                << logKind
+                << QStringLiteral("+%1").arg(attrName)
+                << QStringLiteral("pet_rarity_type=%1").arg(petRarityType)
+                << QStringLiteral("pet_mutation_type=%1").arg(petMutationType);
+
+            emitUiEvent(EventType::BoxHintUpdated, {
+                {QStringLiteral("kind"), displayKind},
                 {QStringLiteral("base_conf_id"), intValue(shieldBreak, {"base_conf_id"})},
                 {QStringLiteral("attr_name"), attrName},
-                {QStringLiteral("pet_rarity_type"), intValue(shieldBreak, {"pet_rarity_type"})},
-                {QStringLiteral("pet_mutation_type"), intValue(shieldBreak, {"pet_mutation_type"})},
+                {QStringLiteral("pet_rarity_type"), petRarityType},
+                {QStringLiteral("pet_mutation_type"), petMutationType},
             });
+
+            if (isShiny) {
+                emitBusinessEvent(EventType::ShinyPetDetected, {
+                    {QStringLiteral("title"), QStringLiteral("异色提示")},
+                    {QStringLiteral("message"), QStringLiteral("发现异色！！ +%1").arg(attrName)},
+                    {QStringLiteral("base_conf_id"), intValue(shieldBreak, {"base_conf_id"})},
+                    {QStringLiteral("attr_name"), attrName},
+                    {QStringLiteral("pet_rarity_type"), petRarityType},
+                    {QStringLiteral("pet_mutation_type"), petMutationType},
+                });
+            }
         }
     }
 }

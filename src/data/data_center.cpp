@@ -419,6 +419,9 @@ void DataCenter::handleEvent(const AppEvent &event)
     case EventType::ShinyPetDetected:
         emit shinyPetDetected(event.payload);
         break;
+    case EventType::BoxHintUpdated:
+        emit boxHintUpdated(event.payload);
+        break;
     default:
         break;
     }

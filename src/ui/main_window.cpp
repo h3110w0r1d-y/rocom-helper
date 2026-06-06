@@ -22,6 +22,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QWidget(parent)
     , m_mapWindow(new MapWindow(&m_dataCenter))
     , m_catchWindow(new CatchWindow(&m_dataCenter))
+    , m_boxHintWindow(new BoxHintWindow(&m_dataCenter))
 {
     setWindowTitle(QStringLiteral("洛克助手"));
     resize(420, 420);
@@ -54,6 +55,7 @@ MainWindow::~MainWindow()
     m_dataCenter.close();
     delete m_mapWindow;
     delete m_catchWindow;
+    delete m_boxHintWindow;
 }
 
 void MainWindow::buildUi()
@@ -64,7 +66,7 @@ void MainWindow::buildUi()
     m_ifaceCombo->lineEdit()->setPlaceholderText(QStringLiteral("选择网卡或输入捕获名"));
     m_refreshIfacesButton = new QPushButton(QStringLiteral("刷新"), this);
 
-    auto *trafficGroup = new QGroupBox(QStringLiteral("流量监控"), this);
+    auto *trafficGroup = new QGroupBox(QStringLiteral("流量解析"), this);
     auto *trafficForm = new QFormLayout(trafficGroup);
     trafficForm->setVerticalSpacing(4);
     trafficForm->setContentsMargins(8, 8, 8, 8);
@@ -75,7 +77,7 @@ void MainWindow::buildUi()
     ifaceRow->addWidget(m_refreshIfacesButton);
     trafficForm->addRow(QStringLiteral("网卡"), ifaceRow);
 
-    m_trafficButton = new QPushButton(QStringLiteral("开启流量监控"), this);
+    m_trafficButton = new QPushButton(QStringLiteral("开启解析"), this);
     m_statusLabel = new QLabel(QStringLiteral("未运行"), this);
     auto *trafficButtons = new QHBoxLayout();
     trafficButtons->setContentsMargins(0, 0, 0, 0);
@@ -121,9 +123,11 @@ void MainWindow::buildUi()
     auto *s2Group = new QGroupBox(QStringLiteral("其他功能"), this);
     auto *s2Layout = new QGridLayout(s2Group);
     m_petFilterButton = new QPushButton(QStringLiteral("宠物筛选"), this);
+    m_showBoxHintButton = new QPushButton(QStringLiteral("盒子提示"), this);
     m_showCatchButton = new QPushButton(QStringLiteral("捕捉日志"), this);
     s2Layout->addWidget(m_petFilterButton, 0, 0);
-    s2Layout->addWidget(m_showCatchButton, 0, 1);
+    s2Layout->addWidget(m_showBoxHintButton, 0, 1);
+    s2Layout->addWidget(m_showCatchButton, 0, 2);
 
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(trafficGroup);
@@ -141,6 +145,7 @@ void MainWindow::connectSignals()
 
     connect(m_showMapButton, &QPushButton::clicked, this, &MainWindow::showMap);
     connect(m_petFilterButton, &QPushButton::clicked, this, &MainWindow::openPetFilter);
+    connect(m_showBoxHintButton, &QPushButton::clicked, this, &MainWindow::showBoxHint);
     connect(m_showCatchButton, &QPushButton::clicked, this, &MainWindow::showCatch);
     connect(m_topCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setAlwaysOnTop);
     connect(m_miniMapCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setMiniMapMode);
@@ -241,7 +246,7 @@ void MainWindow::toggleTraffic()
 {
     if (m_capture.isRunning()) {
         m_capture.stop();
-        m_trafficButton->setText(QStringLiteral("开启流量监控"));
+        m_trafficButton->setText(QStringLiteral("开启解析"));
         m_statusLabel->setText(QStringLiteral("已停止"));
         return;
     }
@@ -254,7 +259,7 @@ void MainWindow::toggleTraffic()
         return;
     }
     if (m_capture.start(deviceName)) {
-        m_trafficButton->setText(QStringLiteral("停止流量监控"));
+        m_trafficButton->setText(QStringLiteral("停止解析"));
         m_statusLabel->setText(QStringLiteral("运行中"));
     }
 }
@@ -262,7 +267,7 @@ void MainWindow::toggleTraffic()
 void MainWindow::onTrafficError(const QString &message)
 {
     m_statusLabel->setText(QStringLiteral("错误: %1").arg(message));
-    m_trafficButton->setText(QStringLiteral("开启流量监控"));
+    m_trafficButton->setText(QStringLiteral("开启解析"));
 }
 
 void MainWindow::showMap()
@@ -278,6 +283,13 @@ void MainWindow::showCatch()
     m_catchWindow->show();
     m_catchWindow->raise();
     m_catchWindow->activateWindow();
+}
+
+void MainWindow::showBoxHint()
+{
+    m_boxHintWindow->show();
+    m_boxHintWindow->raise();
+    m_boxHintWindow->activateWindow();
 }
 
 void MainWindow::openPetFilter()

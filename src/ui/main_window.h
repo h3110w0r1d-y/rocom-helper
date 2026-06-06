@@ -7,6 +7,7 @@
 #include "rwtd/live_capture_service.h"
 #include "storage/database_service.h"
 #include "traffic/traffic_event_mapper.h"
+#include "ui/catch/box_hint_window.h"
 #include "ui/catch/catch_window.h"
 #include "ui/marker_filter_panel.h"
 #include "ui/map/map_window.h"
@@ -42,6 +43,7 @@ private:
     void onTrafficError(const QString &message);
     void showMap();
     void showCatch();
+    void showBoxHint();
     void openPetFilter();
     void importPathOverlay();
     QStringList extractSvgPaths(const QString &filePath) const;
@@ -60,6 +62,7 @@ private:
     DataCenter m_dataCenter;
     MapWindow *m_mapWindow = nullptr;
     CatchWindow *m_catchWindow = nullptr;
+    BoxHintWindow *m_boxHintWindow = nullptr;
     rwtd::LiveCaptureService m_capture;
     EventDispatcher m_eventDispatcher;
     TrafficEventMapper m_trafficEventMapper;
@@ -84,6 +87,7 @@ private:
     QPushButton *m_clearPathButton = nullptr;
     MarkerFilterPanel *m_markerFilterPanel = nullptr;
     QPushButton *m_petFilterButton = nullptr;
+    QPushButton *m_showBoxHintButton = nullptr;
     QPushButton *m_showCatchButton = nullptr;
     QTimer m_saveTimer;
     QList<QMessageBox *> m_alertWindows;

@@ -88,6 +88,7 @@ signals:
     void mapChanged(const QString &mapId);
     void layerChanged(const QString &layerId);
     void shinyPetDetected(const QJsonObject &payload);
+    void boxHintUpdated(const QJsonObject &payload);
 
 private:
     MapState emptyMapState() const;

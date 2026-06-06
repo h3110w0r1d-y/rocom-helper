@@ -19,6 +19,7 @@ enum class EventType {
     MapMarkerTypeVisibilityChanged,
     CatchRecordAdded,
     ShinyPetDetected,
+    BoxHintUpdated,
     PetInfoReload,
     PetInfoChanged,
     PetInfoDeleted,
@@ -72,6 +73,8 @@ inline QString eventTypeName(EventType type)
         return QStringLiteral("catch.record_added");
     case EventType::ShinyPetDetected:
         return QStringLiteral("catch.shiny_pet_detected");
+    case EventType::BoxHintUpdated:
+        return QStringLiteral("box.hint_updated");
     case EventType::PetInfoReload:
         return QStringLiteral("pet_info.reload");
     case EventType::PetInfoChanged:

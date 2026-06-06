@@ -465,9 +465,6 @@ void LiveCaptureService::handleTcpData(int8_t side, const pcpp::TcpStreamData &t
     const QString parserKey = streamKey(info.flowId, info.direction);
     if (tcpData.isBytesMissing()) {
         m_streamParsers[parserKey].reset();
-        emit statusChanged(QStringLiteral("TCP 流缺失 %1 字节，已重置流缓冲: %2 %3")
-                               .arg(tcpData.getMissingByteCount())
-                               .arg(info.flowId, trafficDirectionName(info.direction)));
     }
 
     const QByteArray chunk(reinterpret_cast<const char *>(tcpData.getData()), static_cast<qsizetype>(tcpData.getDataLength()));
@@ -490,7 +487,7 @@ void LiveCaptureService::handleTgcpPacket(const TgcpPacket &packet)
         const QByteArray key = extractTgcpAckKey(packet);
         if (key.size() == 16) {
             rememberFlowKey(packet.flowId, key);
-            emit statusChanged(QStringLiteral("已捕获 AES key: %1").arg(packet.flowId));
+            emit statusChanged(QStringLiteral("已解析 AES key"));
         }
         m_processedPackets.insert(packetKey);
         return;
