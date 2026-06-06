@@ -136,9 +136,16 @@ endif()
 
 set(ROCO_DIST_DIR "${CMAKE_BINARY_DIR}/dist")
 
+# Windows 直接把可执行文件生成到 dist，CLion 运行 roco_helper target 时也会启动这里的 exe。
+if(WIN32)
+    set_target_properties(roco_helper PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY_RELEASE "${ROCO_DIST_DIR}"
+    )
+endif()
+
 # 平台部署：
 # - macOS 保留 .app bundle，并由 macdeployqt 修正 Qt frameworks/plugins。
-# - Windows 输出扁平 dist 目录，包含 exe、运行时 DLL 和 Qt 插件。
+# - Windows 的 exe 直接生成到扁平 dist 目录，构建后补齐运行时 DLL 和 Qt 插件。
 if(APPLE)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
@@ -163,9 +170,6 @@ elseif(WIN32)
 
     add_custom_command(TARGET roco_helper POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${ROCO_DIST_DIR}"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                    "$<TARGET_FILE:roco_helper>"
-                    "${ROCO_DIST_DIR}/$<TARGET_FILE_NAME:roco_helper>"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                     $<TARGET_RUNTIME_DLLS:roco_helper>
                     "${ROCO_DIST_DIR}"
