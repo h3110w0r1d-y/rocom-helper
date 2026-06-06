@@ -1,1 +1,1 @@
-IDI_ICON1 ICON "resources/app.ico"
+IDI_ICON1 ICON "../app.ico"
