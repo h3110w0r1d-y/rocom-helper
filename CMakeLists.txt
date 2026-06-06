@@ -79,6 +79,7 @@ else()
     qt_add_executable(roco_helper WIN32
             src/main.cpp
             ${APP_SOURCES}
+            resources/windows/app.rc
     )
 endif()
 
