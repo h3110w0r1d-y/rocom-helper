@@ -1,6 +1,7 @@
 #pragma once
 
-#include <QHash>
+#include <QList>
+#include <QByteArray>
 #include <QString>
 
 namespace rwtd {
@@ -13,12 +14,18 @@ public:
     void rememberKey(const QString &flowId, const QByteArray &key);
 
 private:
+    struct Entry {
+        QString flowId;
+        QByteArray key;
+    };
+
     void load();
     void save() const;
+    void trim();
 
     QString m_path;
-    QHash<QString, QByteArray> m_keys;
+    QList<Entry> m_entries;
+    QByteArray m_legacyLastKey;
 };
 
 } // namespace rwtd
-

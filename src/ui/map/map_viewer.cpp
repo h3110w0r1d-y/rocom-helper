@@ -21,6 +21,7 @@ namespace app {
 namespace {
 
 constexpr int PathOverlayWidth = 6;
+constexpr qint64 PathRotationLogIntervalMs = 250;
 const QColor PathOverlayColor(255, 77, 79, 210);
 
 } // namespace
@@ -77,6 +78,8 @@ void MapViewer::setMap(const QString &mapId)
     m_maskItem = nullptr;
     m_trailItem = nullptr;
     m_pathOverlayItems.clear();
+    m_pathOverlayPolylines.clear();
+    m_pathRotationLogTimer.invalidate();
     m_layerItems.clear();
     m_markers.clear();
     m_playerItem = nullptr;
@@ -191,6 +194,7 @@ void MapViewer::setPlayerPosition(const PlayerState &player, bool follow)
 
     const QPointF playerPos(player.location.mapX, player.location.mapY);
     recordTrailPosition(playerPos);
+    logPathRotationSuggestion(playerPos, player.rotation);
     if (player.location.layerId != m_activeLayerId) {
         if (m_playerItem != nullptr) {
             m_playerItem->setVisible(false);
@@ -323,6 +327,8 @@ int MapViewer::setPathOverlays(const QStringList &pathData)
 void MapViewer::clearPathOverlays()
 {
     m_pathOverlayData.clear();
+    m_pathOverlayPolylines.clear();
+    m_pathRotationLogTimer.invalidate();
     clearPathOverlayItems();
 }
 
@@ -586,6 +592,8 @@ QImage MapViewer::readImage(const QString &path, bool required) const
 void MapViewer::renderPathOverlays()
 {
     clearPathOverlayItems();
+    m_pathOverlayPolylines.clear();
+    m_pathRotationLogTimer.invalidate();
     if (!m_mapLoaded || m_mapRootItem == nullptr) {
         return;
     }
@@ -600,6 +608,9 @@ void MapViewer::renderPathOverlays()
         const ParsedSvgPath parsed = parseSvgPath(pathData, &ok);
         if (!ok || parsed.path.isEmpty()) {
             continue;
+        }
+        for (const QList<QPointF> &polyline : parsed.polylines) {
+            m_pathOverlayPolylines.append(polyline);
         }
         auto *item = new QGraphicsPathItem(parsed.path, m_mapRootItem);
         item->setPen(pen);
@@ -641,6 +652,30 @@ void MapViewer::recordTrailPosition(const QPointF &playerPos)
     }
     m_lastTrailPos = playerPos;
     m_hasLastTrailPos = true;
+}
+
+void MapViewer::logPathRotationSuggestion(const QPointF &playerPos, double playerRotation)
+{
+    if (m_pathOverlayPolylines.isEmpty()) {
+        return;
+    }
+    if (m_pathRotationLogTimer.isValid() && m_pathRotationLogTimer.elapsed() < PathRotationLogIntervalMs) {
+        return;
+    }
+
+    PathRotationSuggestion suggestion;
+    if (!pathRotationSuggestion(m_pathOverlayPolylines, playerPos, playerRotation, &suggestion)) {
+        return;
+    }
+
+    m_pathRotationLogTimer.restart();
+    qInfo().noquote()
+        << QStringLiteral("path方向建议:")
+        << QStringLiteral("旋转=%1°").arg(suggestion.rotationDelta, 0, 'f', 1)
+        << QStringLiteral("当前=%1°").arg(playerRotation, 0, 'f', 1)
+        << QStringLiteral("目标=%1°").arg(suggestion.desiredRotation, 0, 'f', 1)
+        << QStringLiteral("距路径=%1").arg(suggestion.pathDistance, 0, 'f', 1)
+        << QStringLiteral("前瞻=%1").arg(suggestion.lookaheadDistance, 0, 'f', 1);
 }
 
 void MapViewer::centerPixmapItem(QGraphicsPixmapItem *item)
