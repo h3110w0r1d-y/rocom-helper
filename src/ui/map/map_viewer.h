@@ -4,11 +4,13 @@
 #include "data/map_types.h"
 #include "graphics_items.h"
 
+#include <QElapsedTimer>
 #include <QGraphicsPathItem>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsRectItem>
 #include <QGraphicsTextItem>
 #include <QGraphicsView>
+#include <QList>
 #include <QMap>
 #include <QPoint>
 #include <QRubberBand>
@@ -67,6 +69,7 @@ private:
     void flushSceneState();
     void applyEditFlags(DraggableMarkerItem *item);
     void recordTrailPosition(const QPointF &playerPos);
+    void logPathRotationSuggestion(const QPointF &playerPos, double playerRotation);
     void centerPixmapItem(QGraphicsPixmapItem *item);
     double minimumZoom() const;
     void fitMapToViewCover();
@@ -90,7 +93,9 @@ private:
     QGraphicsRectItem *m_maskItem = nullptr;
     TrailMaskItem *m_trailItem = nullptr;
     QList<QGraphicsPathItem *> m_pathOverlayItems;
+    QList<QList<QPointF>> m_pathOverlayPolylines;
     QStringList m_pathOverlayData;
+    QElapsedTimer m_pathRotationLogTimer;
     QMap<QString, QList<QGraphicsPixmapItem *>> m_layerItems;
     QGraphicsTextItem *m_loadingText = nullptr;
     QMap<QString, DraggableMarkerItem *> m_markers;

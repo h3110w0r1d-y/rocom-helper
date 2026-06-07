@@ -3,12 +3,25 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 
 #include <utility>
 
 namespace rwtd {
+namespace {
+
+constexpr qsizetype MaxCachedKeys = 10;
+
+QByteArray keyFromJsonValue(const QJsonValue &value)
+{
+    const QByteArray key = QByteArray::fromHex(value.toString().toLatin1());
+    return key.size() == 16 ? key : QByteArray();
+}
+
+} // namespace
 
 AesKeyCache::AesKeyCache(QString path)
     : m_path(std::move(path))
@@ -18,11 +31,18 @@ AesKeyCache::AesKeyCache(QString path)
 
 QByteArray AesKeyCache::keyForFlow(const QString &flowId) const
 {
-    QByteArray key = m_keys.value(flowId);
-    if (key.isEmpty()) {
-        key = m_keys.value(QStringLiteral("_last"));
+    for (const Entry &entry : m_entries) {
+        if (entry.flowId == flowId && entry.key.size() == 16) {
+            return entry.key;
+        }
     }
-    return key.size() == 16 ? key : QByteArray();
+    if (m_legacyLastKey.size() == 16) {
+        return m_legacyLastKey;
+    }
+
+    return m_entries.isEmpty() || m_entries.constFirst().key.size() != 16
+        ? QByteArray()
+        : m_entries.constFirst().key;
 }
 
 void AesKeyCache::rememberKey(const QString &flowId, const QByteArray &key)
@@ -30,18 +50,31 @@ void AesKeyCache::rememberKey(const QString &flowId, const QByteArray &key)
     if (m_path.isEmpty() || key.size() != 16) {
         return;
     }
-    if (m_keys.value(flowId) == key && m_keys.value(QStringLiteral("_last")) == key) {
-        return;
+    m_legacyLastKey.clear();
+
+    for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
+        if (it->flowId == flowId) {
+            if (it == m_entries.begin() && it->key == key) {
+                return;
+            }
+            Entry entry{flowId, key};
+            m_entries.erase(it);
+            m_entries.prepend(entry);
+            trim();
+            save();
+            return;
+        }
     }
 
-    m_keys.insert(flowId, key);
-    m_keys.insert(QStringLiteral("_last"), key);
+    m_entries.prepend({flowId, key});
+    trim();
     save();
 }
 
 void AesKeyCache::load()
 {
-    m_keys.clear();
+    m_entries.clear();
+    m_legacyLastKey.clear();
     if (m_path.isEmpty()) {
         return;
     }
@@ -52,16 +85,37 @@ void AesKeyCache::load()
     }
 
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    if (!doc.isObject()) {
+    if (doc.isArray()) {
+        const QJsonArray array = doc.array();
+        for (const QJsonValue &value : array) {
+            if (!value.isObject()) {
+                continue;
+            }
+            const QJsonObject object = value.toObject();
+            const QString flowId = object.value(QStringLiteral("flow_id")).toString().trimmed();
+            const QByteArray key = keyFromJsonValue(object.value(QStringLiteral("key")));
+            if (!flowId.isEmpty() && key.size() == 16) {
+                m_entries.append({flowId, key});
+            }
+        }
+        trim();
         return;
     }
 
-    const QJsonObject object = doc.object();
-    for (auto it = object.begin(); it != object.end(); ++it) {
-        const QByteArray key = QByteArray::fromHex(it.value().toString().toLatin1());
-        if (key.size() == 16) {
-            m_keys.insert(it.key(), key);
+    if (doc.isObject()) {
+        const QJsonObject object = doc.object();
+        m_legacyLastKey = keyFromJsonValue(object.value(QStringLiteral("_last")));
+
+        for (auto it = object.begin(); it != object.end(); ++it) {
+            if (it.key() == QStringLiteral("_last")) {
+                continue;
+            }
+            const QByteArray key = keyFromJsonValue(it.value());
+            if (key.size() == 16) {
+                m_entries.append({it.key(), key});
+            }
         }
+        trim();
     }
 }
 
@@ -72,16 +126,29 @@ void AesKeyCache::save() const
         return;
     }
 
-    QJsonObject object;
-    for (auto it = m_keys.begin(); it != m_keys.end(); ++it) {
-        object.insert(it.key(), QString::fromLatin1(it.value().toHex()));
+    QJsonArray array;
+    for (const Entry &entry : m_entries) {
+        if (entry.flowId.isEmpty() || entry.key.size() != 16) {
+            continue;
+        }
+        array.append(QJsonObject{
+            {QStringLiteral("flow_id"), entry.flowId},
+            {QStringLiteral("key"), QString::fromLatin1(entry.key.toHex())},
+        });
     }
 
     QFile file(m_path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return;
     }
-    file.write(QJsonDocument(object).toJson(QJsonDocument::Indented));
+    file.write(QJsonDocument(array).toJson(QJsonDocument::Indented));
+}
+
+void AesKeyCache::trim()
+{
+    while (m_entries.size() > MaxCachedKeys) {
+        m_entries.removeLast();
+    }
 }
 
 } // namespace rwtd
