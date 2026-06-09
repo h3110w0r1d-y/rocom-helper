@@ -3,6 +3,7 @@
 #include "events/app_event.h"
 #include "map_catalog.h"
 #include "map_types.h"
+#include "runtime_context.h"
 
 #include <QJsonArray>
 #include <QFile>
@@ -30,10 +31,12 @@ public:
     BaseState baseSnapshot() const;
     MapState snapshot() const;
     CatchState catchSnapshot() const;
+    const RuntimeContext &runtimeContext() const;
 
     QList<QPair<QString, QString>> mapOptions() const;
     QVector<MapLayerConfig> layersForMap(const QString &mapId = {}) const;
 
+    void setRuntimeContext(const RuntimeContext &context);
     void setPlayerPositionLogEnabled(bool enabled);
     void setFollowPlayerMap(bool enabled);
     void setCurrentMap(const QString &mapId);
@@ -111,6 +114,7 @@ private:
     BaseState m_baseState;
     MapState m_mapState;
     CatchState m_catchState;
+    RuntimeContext m_runtimeContext;
     bool m_baseDirty = false;
     bool m_followPlayerMap = true;
 };

@@ -16,12 +16,13 @@
 namespace app {
 
 class DatabaseService;
+class DataCenter;
 
 class HttpServerService : public QObject {
     Q_OBJECT
 
 public:
-    explicit HttpServerService(DatabaseService *database, QObject *parent = nullptr);
+    explicit HttpServerService(DatabaseService *database, DataCenter *dataCenter, QObject *parent = nullptr);
 
     bool start(quint16 port = 4939);
     void stop();
@@ -42,6 +43,7 @@ private:
     void acceptSseClient(QHttpServerResponder &&responder);
 
     DatabaseService *m_database = nullptr;
+    DataCenter *m_dataCenter = nullptr;
     QHttpServer m_server;
     QTcpServer m_tcpServer;
     QByteArray m_lastSsePayload;

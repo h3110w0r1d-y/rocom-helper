@@ -1,5 +1,6 @@
 #include "http_server_service.h"
 
+#include "data/data_center.h"
 #include "storage/database_service.h"
 
 #include <QDir>
@@ -13,9 +14,10 @@
 
 namespace app {
 
-HttpServerService::HttpServerService(DatabaseService *database, QObject *parent)
+HttpServerService::HttpServerService(DatabaseService *database, DataCenter *dataCenter, QObject *parent)
     : QObject(parent)
     , m_database(database)
+    , m_dataCenter(dataCenter)
 {
     setupRoutes();
 }
@@ -24,6 +26,10 @@ bool HttpServerService::start(quint16 port)
 {
     if (m_tcpServer.isListening()) {
         return true;
+    }
+    if (m_dataCenter == nullptr || !m_dataCenter->runtimeContext().isValid()) {
+        emit errorOccurred(QStringLiteral("HTTP 服务启动失败"));
+        return false;
     }
 
     if (!m_tcpServer.listen(QHostAddress::LocalHost, port)) {
@@ -105,17 +111,25 @@ void HttpServerService::setupRoutes()
 
 QHttpServerResponse HttpServerService::staticWebResponse(const QHttpServerRequest &request) const
 {
-    static constexpr auto indexResourcePath = ":/web/index.html";
+    if (m_dataCenter == nullptr) {
+        return QHttpServerResponse(QHttpServerResponse::StatusCode::NotFound);
+    }
+    const RuntimeContext &context = m_dataCenter->runtimeContext();
+    const QString webRoot = context.webResourceRoot();
+    const QString indexPath = context.webIndexPath();
+    if (webRoot.isEmpty() || indexPath.isEmpty()) {
+        return QHttpServerResponse(QHttpServerResponse::StatusCode::NotFound);
+    }
 
     QString path = QDir::cleanPath(request.url().path());
     if (path == QStringLiteral(".") || path == QStringLiteral("/")) {
-        path = QStringLiteral("/index.html");
+        path = indexPath;
     }
 
-    QString resourcePath = QStringLiteral(":/web") + path;
+    QString resourcePath = webRoot + path;
     QFile resourceFile(resourcePath);
     if (!resourceFile.exists() || !resourceFile.open(QIODevice::ReadOnly)) {
-        resourcePath = QString::fromLatin1(indexResourcePath);
+        resourcePath = webRoot + indexPath;
         resourceFile.setFileName(resourcePath);
         if (!resourceFile.open(QIODevice::ReadOnly)) {
             return QHttpServerResponse(QHttpServerResponse::StatusCode::NotFound);

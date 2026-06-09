@@ -134,6 +134,11 @@ CatchState DataCenter::catchSnapshot() const
     return m_catchState;
 }
 
+const RuntimeContext &DataCenter::runtimeContext() const
+{
+    return m_runtimeContext;
+}
+
 QList<QPair<QString, QString>> DataCenter::mapOptions() const
 {
     return m_catalog.mapOptions();
@@ -144,6 +149,11 @@ QVector<MapLayerConfig> DataCenter::layersForMap(const QString &mapId) const
     const QString targetMapId = mapId.isEmpty() ? m_mapState.currentMapId : mapId;
     const MapConfig *config = m_catalog.mapById(targetMapId);
     return config == nullptr ? QVector<MapLayerConfig>() : config->layers;
+}
+
+void DataCenter::setRuntimeContext(const RuntimeContext &context)
+{
+    m_runtimeContext = context;
 }
 
 void DataCenter::setPlayerPositionLogEnabled(bool enabled)

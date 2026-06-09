@@ -35,6 +35,7 @@ QByteArray updateCheckExpectedBytes()
 struct UpdateCheckResult {
     bool allowed = false;
     QString message;
+    app::RuntimeContext context;
 };
 
 class BigUInt {
@@ -316,14 +317,18 @@ QByteArray rsaPublicDecryptPkcs1V15(const QByteArray &ciphertext)
     return encoded.mid(separator + 1);
 }
 
-bool isValidUpdateCheckContent(QByteArray content)
+app::RuntimeContext runtimeContextFromUpdateCheckContent(QByteArray content)
 {
     content = content.trimmed();
     const QByteArray ciphertext = QByteArray::fromBase64(content);
     if (ciphertext.isEmpty()) {
-        return false;
+        return {};
     }
-    return rsaPublicDecryptPkcs1V15(ciphertext) == updateCheckExpectedBytes();
+    const QByteArray payload = rsaPublicDecryptPkcs1V15(ciphertext);
+    if (payload != updateCheckExpectedBytes()) {
+        return {};
+    }
+    return app::makeRuntimeContext(payload);
 }
 
 UpdateCheckResult checkUpdateGate()
@@ -347,7 +352,7 @@ UpdateCheckResult checkUpdateGate()
     if (!timeout.isActive()) {
         reply->abort();
         reply->deleteLater();
-        result.message = QStringLiteral("检查更新失败，软件退出");
+        result.message = QStringLiteral("error");
         return result;
     }
 
@@ -358,9 +363,12 @@ UpdateCheckResult checkUpdateGate()
     const QNetworkReply::NetworkError error = reply->error();
     reply->deleteLater();
 
-    if (error == QNetworkReply::NoError && statusCode == 200 && isValidUpdateCheckContent(contentBytes)) {
-        result.allowed = true;
-        return result;
+    if (error == QNetworkReply::NoError && statusCode == 200) {
+        result.context = runtimeContextFromUpdateCheckContent(contentBytes);
+        if (result.context.isValid()) {
+            result.allowed = true;
+            return result;
+        }
     }
 
     result.message = content.isEmpty() ? QStringLiteral("检查更新失败，软件退出") : content;
@@ -386,11 +394,11 @@ int main(int argc, char *argv[])
     const UpdateCheckResult checkResult = checkUpdateGate();
     checkingLabel.close();
     if (!checkResult.allowed) {
-        QMessageBox::critical(nullptr, QStringLiteral("检查更新失败"), checkResult.message);
+        QMessageBox::critical(nullptr, QStringLiteral("error"), checkResult.message);
         return 1;
     }
 
-    app::MainWindow window;
+    app::MainWindow window(checkResult.context);
     window.show();
     return app.exec();
 }

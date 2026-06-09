@@ -20,12 +20,14 @@
 #include <QXmlStreamReader>
 
 namespace app {
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(const RuntimeContext &runtimeContext, QWidget *parent)
     : QWidget(parent)
     , m_mapWindow(new MapWindow(&m_dataCenter))
     , m_catchWindow(new CatchWindow(&m_dataCenter))
     , m_boxHintWindow(new BoxHintWindow(&m_dataCenter))
 {
+    m_dataCenter.setRuntimeContext(runtimeContext);
+
     setWindowTitle(QStringLiteral("洛克助手"));
     resize(420, 420);
 
@@ -33,7 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     connectSignals();
     initializeServices();
 
-    if (!m_capture.loadSchemas(QStringLiteral(":/rwtd"))) {
+    if (!m_capture.loadSchemas(m_dataCenter.runtimeContext().trafficSchemaRoot())) {
         m_statusLabel->setText(QStringLiteral("schema 加载失败"));
     }
 
@@ -256,6 +258,10 @@ void MainWindow::toggleTraffic()
     const QString deviceName = m_ifaceCombo->currentData().toString().isEmpty()
         ? m_ifaceCombo->currentText().trimmed()
         : m_ifaceCombo->currentData().toString();
+    if (!m_dataCenter.runtimeContext().isValid()) {
+        m_statusLabel->setText(QStringLiteral("流量解析启动失败"));
+        return;
+    }
     if (deviceName.isEmpty()) {
         m_statusLabel->setText(QStringLiteral("没有可用网卡"));
         return;
@@ -296,7 +302,11 @@ void MainWindow::showBoxHint()
 
 void MainWindow::openPetFilter()
 {
-    const QUrl url(QStringLiteral("http://127.0.0.1:4939/"));
+    const QUrl url(m_dataCenter.runtimeContext().petFilterUrl());
+    if (!url.isValid() || url.isEmpty()) {
+        m_statusLabel->setText(QStringLiteral("无法打开宠物筛选页面"));
+        return;
+    }
     if (!QDesktopServices::openUrl(url)) {
         m_statusLabel->setText(QStringLiteral("无法打开宠物筛选页面: %1").arg(url.toString()));
     }

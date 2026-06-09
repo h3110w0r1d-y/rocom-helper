@@ -27,7 +27,7 @@ class MainWindow : public QWidget {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(const RuntimeContext &runtimeContext = RuntimeContext(), QWidget *parent = nullptr);
     ~MainWindow() override;
 
 protected:
@@ -68,7 +68,7 @@ private:
     TrafficEventMapper m_trafficEventMapper;
     DatabaseService m_database;
     SseBroadcaster m_sseBroadcaster;
-    HttpServerService m_httpServer{&m_database};
+    HttpServerService m_httpServer{&m_database, &m_dataCenter};
 
     QComboBox *m_ifaceCombo = nullptr;
     QPushButton *m_refreshIfacesButton = nullptr;

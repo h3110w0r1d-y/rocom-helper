@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import hashlib
 import secrets
 
 
@@ -12,6 +13,11 @@ PUBLIC_EXPONENT = 65535
 EXPECTED_BYTES_SIZE = 32
 EXPECTED_BYTES = secrets.token_bytes(EXPECTED_BYTES_SIZE)
 CPP_MODULUS_XOR_KEY = 0xA7
+RUNTIME_STRINGS = {
+    "web-resource": [":/web", "/index.html"],
+    "http": ["http://127.0.0.1:4939/"],
+    "traffic": [":/rwtd"],
+}
 
 
 def is_probable_prime(value: int) -> bool:
@@ -76,6 +82,21 @@ def print_cpp_expected_bytes(data: bytes) -> None:
     print("};")
 
 
+def runtime_key(seed: bytes, purpose: str) -> bytes:
+    return hashlib.sha256(seed + purpose.encode("ascii")).digest()
+
+
+def print_runtime_string_arrays(seed: bytes) -> None:
+    for purpose, values in RUNTIME_STRINGS.items():
+        key = runtime_key(seed, purpose)
+        print(f"{purpose}:")
+        for value in values:
+            raw = value.encode("ascii")
+            encoded = [byte ^ key[index % len(key)] for index, byte in enumerate(raw)]
+            print(f"  {value}")
+            print("  " + ", ".join(f"0x{byte:02X}" for byte in encoded))
+
+
 def main() -> int:
     p = generate_prime(BITS // 2, PUBLIC_EXPONENT)
     while True:
@@ -100,6 +121,9 @@ def main() -> int:
     print()
     print("C++ decodedUpdateCheckModulus() body constants:")
     print_cpp_modulus_array(n)
+    print()
+    print("C++ RuntimeContext encoded strings:")
+    print_runtime_string_arrays(EXPECTED_BYTES)
     print()
     print("PHP private key:")
     print(f"$RSA_E = '{PUBLIC_EXPONENT}';")
