@@ -10,6 +10,9 @@
 > [!IMPORTANT]
 > Windows 用户须安装 [Npcap](https://npcap.com/#download)，安装时勾选 `Install Npcap in WinPcap API-compatilbility mode`
 
+> [!IMPORTANT]
+> 需要在点击 `进入游戏` 前打开工具
+
 ## 下载
 
 - Windows：[roco_helper.exe](https://github.com/h3110w0r1d-y/rocom-helper/releases/download/V1.0/roco_helper.exe)
