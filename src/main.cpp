@@ -1,7 +1,373 @@
 #include "ui/main_window.h"
 
 #include <QApplication>
+#include <QEventLoop>
 #include <QImageReader>
+#include <QLabel>
+#include <QMessageBox>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QTimer>
+
+#include <algorithm>
+#include <cstdint>
+#include <iterator>
+#include <vector>
+
+namespace {
+
+constexpr int UpdateCheckTimeoutMs = 10000;
+constexpr uint32_t UpdateCheckRsaExponent = 65535;
+constexpr unsigned char UpdateCheckExpectedBytes[] = {
+    0x60, 0x66, 0x25, 0x55, 0x28, 0xD1, 0x45, 0x77,
+    0x94, 0x7F, 0x5F, 0xDB, 0x75, 0x9F, 0x93, 0x15,
+    0x91, 0x64, 0x9B, 0x34, 0xF5, 0xEC, 0xAE, 0xA5,
+    0x61, 0xAF, 0x45, 0x2B, 0x60, 0x58, 0x07, 0x84,
+};
+
+QByteArray updateCheckExpectedBytes()
+{
+    return QByteArray(reinterpret_cast<const char *>(UpdateCheckExpectedBytes),
+                      std::size(UpdateCheckExpectedBytes));
+}
+
+struct UpdateCheckResult {
+    bool allowed = false;
+    QString message;
+};
+
+class BigUInt {
+public:
+    static BigUInt fromBigEndian(const QByteArray &bytes)
+    {
+        BigUInt value;
+        value.m_limbs.resize((bytes.size() + 3) / 4);
+        int byteIndex = bytes.size();
+        for (size_t limbIndex = 0; limbIndex < value.m_limbs.size(); ++limbIndex) {
+            uint32_t limb = 0;
+            for (int shift = 0; shift < 32 && byteIndex > 0; shift += 8) {
+                --byteIndex;
+                limb |= static_cast<uint32_t>(static_cast<unsigned char>(bytes.at(byteIndex))) << shift;
+            }
+            value.m_limbs[limbIndex] = limb;
+        }
+        value.normalize();
+        return value;
+    }
+
+    static BigUInt one()
+    {
+        BigUInt value;
+        value.m_limbs = {1};
+        return value;
+    }
+
+    QByteArray toBigEndian(int size) const
+    {
+        QByteArray bytes(size, '\0');
+        int outIndex = size;
+        for (uint32_t limb : m_limbs) {
+            for (int shift = 0; shift < 32 && outIndex > 0; shift += 8) {
+                --outIndex;
+                bytes[outIndex] = static_cast<char>((limb >> shift) & 0xffU);
+            }
+        }
+        return bytes;
+    }
+
+    int bitLength() const
+    {
+        if (m_limbs.empty()) {
+            return 0;
+        }
+        uint32_t high = m_limbs.back();
+        int highBits = 0;
+        while (high != 0) {
+            ++highBits;
+            high >>= 1U;
+        }
+        return static_cast<int>((m_limbs.size() - 1) * 32 + highBits);
+    }
+
+    bool testBit(int bit) const
+    {
+        const size_t limbIndex = static_cast<size_t>(bit / 32);
+        if (limbIndex >= m_limbs.size()) {
+            return false;
+        }
+        return ((m_limbs[limbIndex] >> (bit % 32)) & 1U) != 0;
+    }
+
+    int compare(const BigUInt &other) const
+    {
+        if (m_limbs.size() != other.m_limbs.size()) {
+            return m_limbs.size() < other.m_limbs.size() ? -1 : 1;
+        }
+        for (size_t i = m_limbs.size(); i > 0; --i) {
+            const uint32_t lhs = m_limbs[i - 1];
+            const uint32_t rhs = other.m_limbs[i - 1];
+            if (lhs != rhs) {
+                return lhs < rhs ? -1 : 1;
+            }
+        }
+        return 0;
+    }
+
+    void subtract(const BigUInt &other)
+    {
+        uint64_t borrow = 0;
+        for (size_t i = 0; i < m_limbs.size(); ++i) {
+            const uint64_t rhs = (i < other.m_limbs.size() ? other.m_limbs[i] : 0) + borrow;
+            if (m_limbs[i] >= rhs) {
+                m_limbs[i] = static_cast<uint32_t>(m_limbs[i] - rhs);
+                borrow = 0;
+            } else {
+                m_limbs[i] = static_cast<uint32_t>((uint64_t(1) << 32) + m_limbs[i] - rhs);
+                borrow = 1;
+            }
+        }
+        normalize();
+    }
+
+    void add(const BigUInt &other)
+    {
+        const size_t count = std::max(m_limbs.size(), other.m_limbs.size());
+        m_limbs.resize(count);
+        uint64_t carry = 0;
+        for (size_t i = 0; i < count; ++i) {
+            const uint64_t sum = static_cast<uint64_t>(m_limbs[i])
+                + (i < other.m_limbs.size() ? other.m_limbs[i] : 0)
+                + carry;
+            m_limbs[i] = static_cast<uint32_t>(sum);
+            carry = sum >> 32;
+        }
+        if (carry != 0) {
+            m_limbs.push_back(static_cast<uint32_t>(carry));
+        }
+    }
+
+private:
+    void normalize()
+    {
+        while (!m_limbs.empty() && m_limbs.back() == 0) {
+            m_limbs.pop_back();
+        }
+    }
+
+    std::vector<uint32_t> m_limbs;
+};
+
+BigUInt addMod(BigUInt lhs, const BigUInt &rhs, const BigUInt &modulus)
+{
+    lhs.add(rhs);
+    if (lhs.compare(modulus) >= 0) {
+        lhs.subtract(modulus);
+    }
+    return lhs;
+}
+
+BigUInt reduceMod(const BigUInt &value, const BigUInt &modulus)
+{
+    BigUInt result;
+    for (int bit = value.bitLength() - 1; bit >= 0; --bit) {
+        result = addMod(result, result, modulus);
+        if (value.testBit(bit)) {
+            result = addMod(result, BigUInt::one(), modulus);
+        }
+    }
+    return result;
+}
+
+BigUInt multiplyMod(const BigUInt &lhs, const BigUInt &rhs, const BigUInt &modulus)
+{
+    BigUInt result;
+    BigUInt addend = reduceMod(lhs, modulus);
+    for (int bit = 0; bit < rhs.bitLength(); ++bit) {
+        if (rhs.testBit(bit)) {
+            result = addMod(result, addend, modulus);
+        }
+        addend = addMod(addend, addend, modulus);
+    }
+    return result;
+}
+
+BigUInt powMod(BigUInt base, uint32_t exponent, const BigUInt &modulus)
+{
+    BigUInt result = BigUInt::one();
+    base = reduceMod(base, modulus);
+    while (exponent != 0) {
+        if ((exponent & 1U) != 0) {
+            result = multiplyMod(result, base, modulus);
+        }
+        exponent >>= 1U;
+        if (exponent != 0) {
+            base = multiplyMod(base, base, modulus);
+        }
+    }
+    return result;
+}
+
+QString decodedUpdateCheckUrl()
+{
+    static constexpr unsigned char key = 0x5a;
+    static constexpr unsigned char data[] = {
+        0x32, 0x2E, 0x2E, 0x2A, 0x29, 0x60, 0x75, 0x75, 0x32, 0x69, 0x6B, 0x6B,
+        0x6A, 0x2D, 0x6A, 0x28, 0x6B, 0x3E, 0x74, 0x39, 0x35, 0x37, 0x75, 0x28,
+        0x35, 0x39, 0x35, 0x77, 0x32, 0x3F, 0x36, 0x2A, 0x3F, 0x28, 0x75, 0x2C,
+        0x6B, 0x74, 0x2A, 0x32, 0x2A,
+    };
+
+    QByteArray url;
+    url.reserve(static_cast<int>(std::size(data)));
+    for (unsigned char ch : data) {
+        url.append(static_cast<char>(ch ^ key));
+    }
+    return QString::fromLatin1(url);
+}
+
+QByteArray decodedUpdateCheckModulus()
+{
+    static constexpr unsigned char key = 0xa7;
+    static constexpr unsigned char data[] = {
+        0x37, 0xB3, 0x5F, 0x07, 0x9D, 0x16, 0xF5, 0x95, 0xB3, 0xBF, 0x10, 0xEE,
+        0x1F, 0x85, 0xED, 0x51, 0x12, 0x84, 0xF9, 0x8E, 0x97, 0x4D, 0x88, 0x87,
+        0xBD, 0x78, 0xDA, 0x53, 0x2F, 0x4B, 0xFA, 0x7D, 0x27, 0xA1, 0xEB, 0x25,
+        0x87, 0x84, 0x8F, 0x8D, 0x65, 0xC1, 0xEA, 0xF4, 0x7B, 0x76, 0x03, 0x6D,
+        0x2C, 0x45, 0x16, 0xD1, 0xB5, 0x19, 0x67, 0xD9, 0x90, 0x92, 0xB3, 0xBA,
+        0x7E, 0xA6, 0x1F, 0x78, 0x81, 0xB7, 0x78, 0xB7, 0xC8, 0x70, 0x8C, 0x6A,
+        0x39, 0xFF, 0x91, 0xA7, 0x9D, 0xEA, 0x3D, 0x4A, 0x93, 0xD1, 0xCC, 0x1F,
+        0x3B, 0x68, 0xDB, 0x13, 0xE2, 0x7F, 0x7A, 0xFA, 0xE4, 0x85, 0xC4, 0x19,
+        0x0C, 0x99, 0xF6, 0x60, 0xE1, 0xA7, 0x4B, 0xE4, 0xD2, 0xC6, 0x50, 0x00,
+        0x30, 0x37, 0xA1, 0x39, 0xEA, 0x73, 0x4D, 0x6C, 0x07, 0x52, 0xC7, 0xF5,
+        0x05, 0x01, 0xB0, 0xC6, 0xD0, 0xC0, 0x11, 0x59, 0xD3, 0x2B, 0xF4, 0x93,
+        0x2A, 0x74, 0x60, 0xB1, 0xC1, 0x0B, 0x38, 0xAD, 0x1C, 0xA5, 0xC7, 0xB5,
+        0x24, 0xDA, 0xA5, 0xB0, 0x7C, 0xEB, 0x59, 0x34, 0x91, 0x58, 0xA6, 0xC7,
+        0xC4, 0xFA, 0x9A, 0x51, 0x28, 0xEE, 0x08, 0x16, 0x2A, 0x4C, 0x60, 0xAA,
+        0xCD, 0xAD, 0x81, 0x3D, 0x12, 0x07, 0xB5, 0xFA, 0xF8, 0x29, 0x16, 0x83,
+        0xC3, 0xE2, 0x47, 0x0A, 0xED, 0xFB, 0xAB, 0xF6, 0xBB, 0x1A, 0xA1, 0xD0,
+        0x70, 0x6E, 0x8D, 0xEF, 0xE8, 0x85, 0x29, 0xFC, 0xA5, 0x92, 0xAD, 0x66,
+        0xFE, 0x36, 0x9A, 0x48, 0xD9, 0x7C, 0x46, 0x85, 0x65, 0x99, 0x70, 0xF5,
+        0xDF, 0x08, 0x3E, 0x07, 0xF0, 0xF4, 0x52, 0x61, 0x69, 0xD3, 0x6F, 0x31,
+        0x6D, 0x53, 0x93, 0x93, 0xFE, 0x1F, 0xE3, 0xCF, 0x57, 0x06, 0x98, 0xCF,
+        0x79, 0xD2, 0x92, 0x9F, 0x7A, 0x26, 0x21, 0x74, 0x11, 0xF7, 0x07, 0xA9,
+        0xBC, 0xDB, 0xD4, 0xA4, 0x01, 0x3F, 0x3E, 0x6C, 0xFC, 0x73, 0xFF, 0x6B,
+        0xC4, 0x03, 0x79, 0x20, 0x98, 0x99, 0xEC, 0x23, 0x3F, 0x45, 0x7B, 0xC3,
+        0x98, 0xBF, 0x1E, 0x71, 0x4D, 0x0C, 0x10, 0x2D, 0x67, 0xBF, 0x29, 0xFF,
+        0x44, 0x18, 0x8A, 0x4B, 0xD0, 0xC0, 0x1E, 0x2B, 0xFE, 0x66, 0xD7, 0xC1,
+        0x0B, 0x03, 0x2A, 0x2C, 0x43, 0xE7, 0xE8, 0xC0, 0xD5, 0x15, 0xB4, 0xC2,
+        0x2C, 0xF7, 0xC2, 0x6E, 0xED, 0x3D, 0x31, 0x4F, 0xE9, 0xD0, 0xFB, 0xBA,
+        0x28, 0x9C, 0x30, 0x8F, 0x7E, 0xBF, 0x43, 0x29, 0xCA, 0x04, 0xEA, 0xE8,
+        0x57, 0xE6, 0xA8, 0xFB, 0xF0, 0x3F, 0x57, 0x6C, 0xB2, 0xC9, 0x40, 0xA0,
+        0x2F, 0xD7, 0x1F, 0xA2, 0x2A, 0xC3, 0xB2, 0xAE, 0xFD, 0xA0, 0x57, 0x92,
+        0x8A, 0x94, 0xC3, 0xB7, 0xE5, 0x3C, 0xEE, 0x96, 0x1E, 0xAC, 0x5E, 0x5C,
+        0x0F, 0x6F, 0x69, 0x97, 0x6E, 0x02, 0xE1, 0x92, 0x8B, 0xAE, 0x01, 0x5A,
+        0x8D, 0x3D, 0x9D, 0x4F, 0xEC, 0xD6, 0xE5, 0xA9, 0x68, 0x54, 0x82, 0xB8,
+        0x8A, 0x93, 0x9A, 0x79, 0x7C, 0x7E, 0xE9, 0xF1, 0xBD, 0x08, 0xAB, 0x63,
+        0x40, 0xC6, 0x69, 0xE9, 0x97, 0xB8, 0xD7, 0x06, 0x1E, 0x9F, 0x89, 0xDC,
+        0xF2, 0x2D, 0x22, 0xD6, 0x5E, 0x47, 0x0E, 0x17, 0xF1, 0xB8, 0x14, 0xA9,
+        0x00, 0x07, 0x37, 0x0A, 0xD6, 0xBB, 0x72, 0x4A, 0x08, 0xA9, 0xEC, 0x48,
+        0x9B, 0x15, 0x0F, 0x72, 0x1A, 0x8C, 0x56, 0x22, 0x5C, 0x21, 0x72, 0x23,
+        0xD7, 0x40, 0xA8, 0x68, 0x11, 0xA0, 0xA7, 0x90, 0x09, 0x41, 0x83, 0x6A,
+        0x36, 0x3A, 0x82, 0xB9, 0x3B, 0xC5, 0x69, 0x58, 0xE6, 0xA9, 0x3A, 0xA9,
+        0xCC, 0x1C, 0x4C, 0x73, 0xE9, 0x15, 0x76, 0x82, 0x13, 0xF3, 0x92, 0xCE,
+        0xF1, 0x20, 0x02, 0x48, 0xF4, 0x0A, 0xB5, 0x5D, 0x18, 0xF6, 0xFA, 0x9D,
+        0xD3, 0xF7, 0xAB, 0x6A, 0x49, 0xA7, 0x69, 0x48,
+    };
+
+    QByteArray modulus;
+    modulus.reserve(static_cast<int>(std::size(data)));
+    for (unsigned char ch : data) {
+        modulus.append(static_cast<char>(ch ^ key));
+    }
+    return modulus;
+}
+
+QByteArray rsaPublicDecryptPkcs1V15(const QByteArray &ciphertext)
+{
+    const BigUInt modulus = BigUInt::fromBigEndian(decodedUpdateCheckModulus());
+    const int modulusSize = (modulus.bitLength() + 7) / 8;
+    if (ciphertext.size() != modulusSize) {
+        return {};
+    }
+
+    const BigUInt cipher = BigUInt::fromBigEndian(ciphertext);
+    if (cipher.compare(modulus) >= 0) {
+        return {};
+    }
+
+    const QByteArray encoded = powMod(cipher, UpdateCheckRsaExponent, modulus).toBigEndian(modulusSize);
+    if (encoded.size() < 11
+        || static_cast<unsigned char>(encoded.at(0)) != 0x00
+        || static_cast<unsigned char>(encoded.at(1)) != 0x02) {
+        return {};
+    }
+
+    int separator = -1;
+    for (int i = 2; i < encoded.size(); ++i) {
+        if (encoded.at(i) == '\0') {
+            separator = i;
+            break;
+        }
+    }
+    if (separator < 10) {
+        return {};
+    }
+    return encoded.mid(separator + 1);
+}
+
+bool isValidUpdateCheckContent(QByteArray content)
+{
+    content = content.trimmed();
+    const QByteArray ciphertext = QByteArray::fromBase64(content);
+    if (ciphertext.isEmpty()) {
+        return false;
+    }
+    return rsaPublicDecryptPkcs1V15(ciphertext) == updateCheckExpectedBytes();
+}
+
+UpdateCheckResult checkUpdateGate()
+{
+    QNetworkAccessManager manager;
+    QNetworkRequest request{QUrl(decodedUpdateCheckUrl())};
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    QNetworkReply *reply = manager.get(request);
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+
+    timeout.start(UpdateCheckTimeoutMs);
+    loop.exec();
+
+    UpdateCheckResult result;
+    if (!timeout.isActive()) {
+        reply->abort();
+        reply->deleteLater();
+        result.message = QStringLiteral("检查更新失败，软件退出");
+        return result;
+    }
+
+    timeout.stop();
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray contentBytes = reply->readAll();
+    const QString content = QString::fromUtf8(contentBytes).trimmed();
+    const QNetworkReply::NetworkError error = reply->error();
+    reply->deleteLater();
+
+    if (error == QNetworkReply::NoError && statusCode == 200 && isValidUpdateCheckContent(contentBytes)) {
+        result.allowed = true;
+        return result;
+    }
+
+    result.message = content.isEmpty() ? QStringLiteral("检查更新失败，软件退出") : content;
+    return result;
+}
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -9,6 +375,21 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setWindowIcon(QIcon(QStringLiteral(":/app.png")));
+
+    QLabel checkingLabel(QStringLiteral("正在检查更新"));
+    checkingLabel.setAlignment(Qt::AlignCenter);
+    checkingLabel.setWindowTitle(QStringLiteral("洛克助手"));
+    checkingLabel.resize(260, 90);
+    checkingLabel.show();
+    QApplication::processEvents();
+
+    const UpdateCheckResult checkResult = checkUpdateGate();
+    checkingLabel.close();
+    if (!checkResult.allowed) {
+        QMessageBox::critical(nullptr, QStringLiteral("检查更新失败"), checkResult.message);
+        return 1;
+    }
+
     app::MainWindow window;
     window.show();
     return app.exec();
