@@ -1,6 +1,7 @@
 #include "box_hint_window.h"
 
 #include "data/data_center.h"
+#include "ui/window_flags.h"
 
 #include <QFont>
 #include <QLabel>
@@ -14,8 +15,7 @@ BoxHintWindow::BoxHintWindow(DataCenter *dataCenter, QWidget *parent)
     , m_attrLabel(new QLabel(QStringLiteral("打掉盒子后会显示当前属性"), this))
 {
     setWindowTitle(QStringLiteral("盒子提示"));
-    setWindowFlag(Qt::WindowStaysOnTopHint, true);
-    resize(260, 150);
+    setCloseOnlyWindowControls(this, true);
 
     QFont kindFont = m_kindLabel->font();
     kindFont.setPointSize(kindFont.pointSize() + 12);
@@ -26,14 +26,17 @@ BoxHintWindow::BoxHintWindow(DataCenter *dataCenter, QWidget *parent)
     m_attrLabel->setAlignment(Qt::AlignCenter);
 
     auto *layout = new QVBoxLayout(this);
-    layout->addStretch(1);
+    layout->setSizeConstraint(QLayout::SetFixedSize);
+    layout->setContentsMargins(18, 14, 18, 14);
+    layout->setSpacing(6);
     layout->addWidget(m_kindLabel);
     layout->addWidget(m_attrLabel);
-    layout->addStretch(1);
 
     if (dataCenter != nullptr) {
         connect(dataCenter, &DataCenter::boxHintUpdated, this, &BoxHintWindow::updateHint);
     }
+
+    adjustSize();
 }
 
 void BoxHintWindow::updateHint(const QJsonObject &payload)

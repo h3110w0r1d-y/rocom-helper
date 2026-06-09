@@ -47,6 +47,7 @@ target_include_directories(rwtd PUBLIC
 target_link_libraries(rwtd
         PUBLIC
         Qt6::Core
+        Qt6::Network
         protobuf::libprotobuf
         PRIVATE
         PcapPlusPlus::Pcap++

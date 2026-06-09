@@ -7,7 +7,9 @@
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QHostAddress>
 #include <QMutexLocker>
+#include <QNetworkInterface>
 #include <QStandardPaths>
 #include <QTextStream>
 
@@ -18,6 +20,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <iphlpapi.h>
 #endif
 
@@ -53,6 +56,25 @@ QStringList ipv4Addresses(const pcpp::PcapLiveDevice *device)
         }
         result.append(ipToString(address));
     }
+    return result;
+}
+
+QStringList qtInterfaceIpv4Addresses(const QString &interfaceName)
+{
+    QStringList result;
+    const QNetworkInterface networkInterface = QNetworkInterface::interfaceFromName(interfaceName);
+    if (!networkInterface.isValid()) {
+        return result;
+    }
+
+    for (const QNetworkAddressEntry &entry : networkInterface.addressEntries()) {
+        const QHostAddress address = entry.ip();
+        if (address.protocol() != QAbstractSocket::IPv4Protocol || address.isNull()) {
+            continue;
+        }
+        result.append(address.toString());
+    }
+    result.removeDuplicates();
     return result;
 }
 
@@ -164,6 +186,69 @@ QHash<QString, QString> windowsAdapterFriendlyNames()
     return result;
 }
 
+QHash<QString, QStringList> windowsAdapterIpv4Addresses()
+{
+    QHash<QString, QStringList> result;
+    ULONG bufferLength = 15 * 1024;
+    QByteArray buffer(static_cast<int>(bufferLength), Qt::Uninitialized);
+
+    auto *addresses = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buffer.data());
+    ULONG status = GetAdaptersAddresses(
+        AF_INET,
+        GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+        nullptr,
+        addresses,
+        &bufferLength);
+    if (status == ERROR_BUFFER_OVERFLOW) {
+        buffer.resize(static_cast<int>(bufferLength));
+        addresses = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buffer.data());
+        status = GetAdaptersAddresses(
+            AF_INET,
+            GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+            nullptr,
+            addresses,
+            &bufferLength);
+    }
+    if (status != NO_ERROR) {
+        return result;
+    }
+
+    for (auto *adapter = addresses; adapter != nullptr; adapter = adapter->Next) {
+        const QString guid = adapter->AdapterName == nullptr
+            ? QString()
+            : normalizedWindowsAdapterGuid(QString::fromLocal8Bit(adapter->AdapterName));
+        if (guid.isEmpty()) {
+            continue;
+        }
+
+        QStringList ipv4Addresses;
+        for (auto *unicast = adapter->FirstUnicastAddress; unicast != nullptr; unicast = unicast->Next) {
+            const SOCKET_ADDRESS &socketAddress = unicast->Address;
+            if (socketAddress.lpSockaddr == nullptr || socketAddress.lpSockaddr->sa_family != AF_INET) {
+                continue;
+            }
+
+            char host[NI_MAXHOST] = {};
+            const int rc = getnameinfo(
+                socketAddress.lpSockaddr,
+                socketAddress.iSockaddrLength,
+                host,
+                sizeof(host),
+                nullptr,
+                0,
+                NI_NUMERICHOST);
+            if (rc == 0) {
+                ipv4Addresses.append(QString::fromLatin1(host));
+            }
+        }
+        ipv4Addresses.removeDuplicates();
+        if (!ipv4Addresses.isEmpty()) {
+            result.insert(guid, ipv4Addresses);
+        }
+    }
+    return result;
+}
+
 QString windowsFriendlyNameForDevice(const QString &deviceName, const QHash<QString, QString> &friendlyNames)
 {
     const QString guid = normalizedWindowsAdapterGuid(deviceName);
@@ -171,6 +256,15 @@ QString windowsFriendlyNameForDevice(const QString &deviceName, const QHash<QStr
         return {};
     }
     return friendlyNames.value(guid);
+}
+
+QStringList windowsIpv4AddressesForDevice(const QString &deviceName, const QHash<QString, QStringList> &addresses)
+{
+    const QString guid = normalizedWindowsAdapterGuid(deviceName);
+    if (guid.isEmpty()) {
+        return {};
+    }
+    return addresses.value(guid);
 }
 #endif
 
@@ -316,6 +410,7 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
     const QString defaultInterface = defaultRouteInterfaceName();
 #if defined(Q_OS_WIN)
     const QHash<QString, QString> friendlyNames = windowsAdapterFriendlyNames();
+    const QHash<QString, QStringList> freshAddresses = windowsAdapterIpv4Addresses();
 #elif defined(__APPLE__)
     const QHash<QString, QString> friendlyNames = macOSInterfaceFriendlyNames();
 #else
@@ -326,7 +421,14 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
         info.name = QString::fromStdString(device->getName());
         info.description = QString::fromStdString(device->getDesc());
         info.displayName = captureDeviceDisplayName(device, friendlyNames);
-        info.addresses = ipv4Addresses(device);
+#if defined(Q_OS_WIN)
+        info.addresses = windowsIpv4AddressesForDevice(info.name, freshAddresses);
+#else
+        info.addresses = qtInterfaceIpv4Addresses(info.name);
+#endif
+        if (info.addresses.isEmpty()) {
+            info.addresses = ipv4Addresses(device);
+        }
         if (info.addresses.isEmpty()) {
             continue;
         }

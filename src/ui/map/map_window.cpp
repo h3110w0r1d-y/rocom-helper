@@ -1,5 +1,7 @@
 #include "map_window.h"
 
+#include "ui/window_flags.h"
+
 #include <QApplication>
 #include <QClipboard>
 #include <QCloseEvent>
@@ -19,6 +21,7 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
     , m_viewer(new MapViewer(dataCenter != nullptr ? &dataCenter->catalog() : nullptr, this))
 {
     setWindowTitle(m_baseTitle);
+    setCloseOnlyWindowControls(this);
     resize(1000, 720);
 
     connect(m_viewer, &MapViewer::mapClicked, this, &MapWindow::createMarkerAt);
@@ -141,13 +144,7 @@ void MapWindow::applyState(const MapState &state)
 
 void MapWindow::setAlwaysOnTop(bool enabled)
 {
-    Qt::WindowFlags flags = windowFlags();
-    if (enabled) {
-        flags |= Qt::WindowStaysOnTopHint;
-    } else {
-        flags &= ~Qt::WindowStaysOnTopHint;
-    }
-    setWindowFlags(flags);
+    setCloseOnlyWindowControls(this, enabled);
     show();
 }
 

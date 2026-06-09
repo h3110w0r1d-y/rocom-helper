@@ -1,5 +1,7 @@
 #include "main_window.h"
 
+#include "ui/window_flags.h"
+
 #include <QDesktopServices>
 #include <QFileDialog>
 #include <QCloseEvent>
@@ -451,7 +453,7 @@ void MainWindow::showShinyAlert(const QJsonObject &payload)
     box->setInformativeText(details.join(QLatin1Char('\n')));
     box->setStandardButtons(QMessageBox::Ok);
     box->setWindowModality(Qt::NonModal);
-    box->setWindowFlag(Qt::WindowStaysOnTopHint, true);
+    setCloseOnlyWindowControls(box, true);
     connect(box, &QMessageBox::finished, this, [this, box] {
         forgetAlert(box);
     });

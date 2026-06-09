@@ -1,5 +1,7 @@
 #include "catch_window.h"
 
+#include "ui/window_flags.h"
+
 #include <QAbstractItemView>
 #include <QHeaderView>
 #include <QTableWidgetItem>
@@ -13,7 +15,7 @@ CatchWindow::CatchWindow(DataCenter *dataCenter, QWidget *parent)
     , m_table(new QTableWidget(0, 4, this))
 {
     setWindowTitle(QStringLiteral("捕捉日志"));
-    setWindowFlag(Qt::WindowStaysOnTopHint, true);
+    setCloseOnlyWindowControls(this, true);
     resize(360, 420);
 
     m_table->setHorizontalHeaderLabels({QStringLiteral("名称"), QStringLiteral("性格"), QStringLiteral("天分"), QStringLiteral("时间")});
