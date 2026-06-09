@@ -88,6 +88,7 @@ qt_add_resources(roco_helper "app_resources"
         PREFIX "/"
         BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources"
         FILES ${APP_RESOURCE_FILES}
+        OPTIONS -no-compress
 )
 
 target_include_directories(roco_helper PRIVATE
@@ -102,8 +103,8 @@ target_link_libraries(roco_helper PRIVATE
         rwtd
 )
 
-if(WIN32)
-    # 静态 Qt 会自动导入 SQL 插件；本项目只使用 SQLite，排除 ODBC 可避免额外动态链接切换。
+# 静态 Qt 会自动导入 SQL 插件；本项目只使用 SQLite，排除 ODBC 可避免额外链接系统 ODBC。
+if(TARGET Qt6::QODBCDriverPlugin)
     qt_import_plugins(roco_helper
             EXCLUDE Qt6::QODBCDriverPlugin
     )
@@ -128,34 +129,15 @@ elseif(WIN32)
     endif()
 endif()
 
-set(ROCO_DIST_DIR "${CMAKE_BINARY_DIR}/dist")
-
 # Windows 直接把可执行文件生成到 dist，CLion 运行 roco_helper target 时也会启动这里的 exe。
 if(WIN32)
+    set(ROCO_DIST_DIR "${CMAKE_BINARY_DIR}/dist")
     set_target_properties(roco_helper PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY_RELEASE "${ROCO_DIST_DIR}"
     )
     add_custom_command(TARGET roco_helper PRE_LINK
             COMMAND "${CMAKE_COMMAND}" -E rm -rf "${ROCO_DIST_DIR}"
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${ROCO_DIST_DIR}"
-            VERBATIM
-    )
-endif()
-
-# 平台部署：
-# - macOS 保留 .app bundle，并由 macdeployqt 修正 Qt frameworks/plugins。
-# - Windows 当前使用静态 Qt，exe 直接生成到扁平 dist 目录。
-if(APPLE)
-    get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
-    get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
-    find_program(MACDEPLOYQT_EXECUTABLE
-            NAMES macdeployqt
-            HINTS "${QT_BIN_DIR}"
-            REQUIRED
-    )
-
-    add_custom_command(TARGET roco_helper POST_BUILD
-            COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:roco_helper>"
             VERBATIM
     )
 endif()
