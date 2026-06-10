@@ -48,7 +48,6 @@ build_qt() {
             -qt-pcre \
             -qt-libpng \
             -qt-libjpeg \
-            -qt-webp \
             -qt-freetype \
             -qt-harfbuzz \
             -qt-sqlite \
@@ -63,7 +62,37 @@ build_qt() {
             -skip qtsensors \
             -skip qtserialport \
             -skip qtserialbus \
-            -skip qtwayland
+            -skip qtwayland \
+            -skip qtquick3dphysics \
+            -skip qtspeech \
+            -skip qtgrpc \
+            -skip qtdoc \
+            -skip qtmqtt \
+            -skip qtnetworkauth \
+            -skip qtwebview \
+            -skip qtvirtualkeyboard \
+            -skip qt5compat \
+            -skip qtdeclarative \
+            -skip qtimageformats \
+            -skip qtlanguageserver \
+            -skip qtshadertools \
+            -skip qtactiveqt \
+            -skip qtcanvaspainter \
+            -skip qtcoap \
+            -skip qtdatavis3d \
+            -skip qtgraphs \
+            -skip qttasktree \
+            -skip qtlottie \
+            -skip qtopcua \
+            -skip qtopenapi \
+            -skip qtquickeffectmaker \
+            -skip qtquicktimeline \
+            -skip qtremoteobjects \
+            -skip qtscxml \
+            -skip qtwebchannel \
+            -skip qttools \
+            -skip qtsvg \
+            -skip qttranslations
     )
 
     cmake --build "${QT_BUILD}" --parallel "${JOBS}"
