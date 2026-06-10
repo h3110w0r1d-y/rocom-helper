@@ -15,8 +15,8 @@
 
 ## 下载
 
-- Windows：[roco_helper.exe](https://github.com/h3110w0r1d-y/rocom-helper/releases/download/V1.0/roco_helper.exe)
-- macOS：[roco_helper.app.zip](https://github.com/h3110w0r1d-y/rocom-helper/releases/download/V1.0/roco_helper.app.zip)
+- Windows：[roco_helper.exe](https://github.com/h3110w0r1d-y/rocom-helper/releases/download/V1.1/roco_helper.exe)
+- macOS：[roco_helper.app.zip](https://github.com/h3110w0r1d-y/rocom-helper/releases/download/V1.1/roco_helper.app.zip)
 
 ## 功能介绍
 
