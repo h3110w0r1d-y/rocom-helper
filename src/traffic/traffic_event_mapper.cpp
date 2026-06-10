@@ -431,6 +431,7 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
     }
 
     if (messageName == QStringLiteral("ZonePetBoxChangePetRsp")
+        || messageName == QStringLiteral("ZonePetMedalCommonRsp")
         || messageName == QStringLiteral("ZoneSceneThrowCatchFinishRsp")
         || messageName == QStringLiteral("ZoneSceneEndThrowRsp")) {
         processRetInfo(objectForKeys(payload, {"ret_info"}));
