@@ -611,8 +611,8 @@ void LiveCaptureService::handleTgcpPacket(const TgcpPacket &packet)
         return;
     }
 
-    QJsonObject payload;
-    if (!m_protobuf.decode(record->opcode, record->payload, &payload)) {
+    const QString messageName = m_protobuf.messageNameForOpcode(record->opcode);
+    if (messageName.isEmpty()) {
         return;
     }
 
@@ -620,8 +620,8 @@ void LiveCaptureService::handleTgcpPacket(const TgcpPacket &packet)
     action.flowId = packet.flowId;
     action.direction = packet.direction;
     action.opcode = record->opcode;
-    action.messageName = m_protobuf.messageNameForOpcode(record->opcode);
-    action.payload = payload;
+    action.messageName = messageName;
+    action.payload = record->payload;
     emit actionDecoded(action);
 }
 

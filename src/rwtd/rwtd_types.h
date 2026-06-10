@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QByteArray>
-#include <QJsonObject>
 #include <QMetaType>
 #include <QString>
 #include <QStringList>
@@ -62,7 +61,7 @@ struct DecodedAction {
     TrafficDirection direction = TrafficDirection::Unknown;
     quint32 opcode = 0;
     QString messageName;
-    QJsonObject payload;
+    QByteArray payload;
 };
 
 struct CaptureDeviceInfo {
