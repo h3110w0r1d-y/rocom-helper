@@ -1,6 +1,7 @@
 #include "live_capture_service.h"
 
 #include "record_decoder.h"
+#include "rwtd/zone_opcodes.h"
 
 #include <QCoreApplication>
 #include <QByteArray>
@@ -439,27 +440,11 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
     return result;
 }
 
-bool LiveCaptureService::loadSchemas(const QString &dataDir)
-{
-    QMutexLocker locker(&m_mutex);
-    if (!m_protobuf.load(dataDir)) {
-        emit errorOccurred(m_protobuf.errorString());
-        return false;
-    }
-    m_knownOpcodes = m_protobuf.knownOpcodes();
-    emit statusChanged(QStringLiteral("已加载 protobuf schema: %1 个 opcode").arg(m_knownOpcodes.size()));
-    return true;
-}
-
 bool LiveCaptureService::start(const QString &deviceName, quint16 port)
 {
     QMutexLocker locker(&m_mutex);
     if (m_running) {
         return true;
-    }
-    if (!m_protobuf.isAvailable()) {
-        emit errorOccurred(QStringLiteral("schema 尚未加载"));
-        return false;
     }
 
     m_device = pcpp::PcapLiveDeviceList::getInstance().getDeviceByName(deviceName.toStdString());
@@ -605,14 +590,9 @@ void LiveCaptureService::handleTgcpPacket(const TgcpPacket &packet)
         return;
     }
 
-    const std::optional<DecryptedRecord> record = DataRecordDecoder::decryptAndParse(key, packet, m_knownOpcodes);
+    const std::optional<DecryptedRecord> record = DataRecordDecoder::decryptAndParse(key, packet, knownZoneOpcodes());
     m_processedPackets.insert(packetKey);
-    if (!record.has_value()) {
-        return;
-    }
-
-    const QString messageName = m_protobuf.messageNameForOpcode(record->opcode);
-    if (messageName.isEmpty()) {
+    if (!record.has_value() || !isKnownZoneOpcode(record->opcode)) {
         return;
     }
 
@@ -620,7 +600,6 @@ void LiveCaptureService::handleTgcpPacket(const TgcpPacket &packet)
     action.flowId = packet.flowId;
     action.direction = packet.direction;
     action.opcode = record->opcode;
-    action.messageName = messageName;
     action.payload = record->payload;
     emit actionDecoded(action);
 }

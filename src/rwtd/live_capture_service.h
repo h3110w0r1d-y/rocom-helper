@@ -1,7 +1,6 @@
 #pragma once
 
 #include "key_cache.h"
-#include "protobuf_decoder.h"
 #include "tgcp_parser.h"
 
 #include <QObject>
@@ -30,7 +29,6 @@ public:
 
     static QList<CaptureDeviceInfo> availableDevices();
 
-    bool loadSchemas(const QString &dataDir);
     bool start(const QString &deviceName, quint16 port = DefaultPort);
     void stop();
     bool isRunning() const;
@@ -62,8 +60,6 @@ private:
     quint16 m_port = DefaultPort;
     bool m_running = false;
 
-    DynamicProtobufDecoder m_protobuf;
-    QSet<quint32> m_knownOpcodes;
     AesKeyCache m_keyCache;
     QHash<QString, QByteArray> m_flowKeys;
     QHash<QString, TgcpStreamParser> m_streamParsers;

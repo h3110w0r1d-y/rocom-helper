@@ -12,6 +12,7 @@ namespace app {
 
 constexpr double MapIconScale = 0.5;
 constexpr const char *DefaultMarkerType = "fruit";
+constexpr const char *DefaultMapBackgroundColor = "#E9DED1";
 
 struct GamePoint2D {
     double x = 0.0;
@@ -70,6 +71,7 @@ struct MapConfig {
     CoordinateTransform transform;
     MapTileConfig tile;
     QString topLayerId = QStringLiteral("g");
+    QString backgroundColor = QString::fromLatin1(DefaultMapBackgroundColor);
     QVector<MapLayerConfig> layers;
     QString rootPath;
 

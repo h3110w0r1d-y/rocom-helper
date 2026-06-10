@@ -98,16 +98,19 @@ void MapViewer::setMap(const QString &mapId)
     m_loadingText = nullptr;
     m_mapConfig = config;
 
+    const QColor backgroundColor(config->backgroundColor);
+    m_scene->setBackgroundBrush(backgroundColor);
+
     auto *root = new QGraphicsRectItem(0, 0, config->width(), config->height());
     m_mapRootItem = root;
     root->setPen(QPen(Qt::NoPen));
-    root->setBrush(QBrush(Qt::transparent));
+    root->setBrush(QBrush(backgroundColor));
     root->setZValue(0);
     m_scene->addItem(root);
 
-    auto *tileItem = new QGraphicsPixmapItem(QPixmap::fromImage(fullImage), root);
-    tileItem->setTransformationMode(Qt::SmoothTransformation);
-    tileItem->setZValue(0);
+    auto *mapImageItem = new QGraphicsPixmapItem(QPixmap::fromImage(fullImage), root);
+    mapImageItem->setTransformationMode(Qt::SmoothTransformation);
+    mapImageItem->setZValue(0);
 
     auto *maskItem = new QGraphicsRectItem(0, 0, config->width(), config->height(), root);
     m_maskItem = maskItem;
@@ -514,6 +517,7 @@ void MapViewer::resizeEvent(QResizeEvent *event)
 void MapViewer::showLoadingScene(const QString &message)
 {
     m_scene->clear();
+    m_scene->setBackgroundBrush(QColor(QString::fromLatin1(DefaultMapBackgroundColor)));
     m_scene->setSceneRect(0, 0, 900, 600);
     m_loadingText = m_scene->addText(message);
     m_loadingText->setDefaultTextColor(QColor(QStringLiteral("#3c4043")));
@@ -527,7 +531,7 @@ bool MapViewer::loadMapImages(const MapConfig &config, QImage *fullImage, QMap<Q
     if (fullImage == nullptr || layerImages == nullptr) {
         return false;
     }
-    *fullImage = composeFullImage(config);
+    *fullImage = readImage(config.resolvePath(QStringLiteral("full.png")), true);
     if (fullImage->isNull()) {
         return false;
     }
@@ -543,39 +547,6 @@ bool MapViewer::loadMapImages(const MapConfig &config, QImage *fullImage, QMap<Q
         layerImages->insert(layer.id, images);
     }
     return true;
-}
-
-QImage MapViewer::composeFullImage(const MapConfig &config) const
-{
-    QImage full(config.width(), config.height(), QImage::Format_ARGB32_Premultiplied);
-    full.fill(Qt::transparent);
-
-    QPainter painter(&full);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-    for (const MapImageConfig &imageConfig : fullTileConfigs(config)) {
-        const QImage image = readImage(config.resolvePath(imageConfig.path), true);
-        if (image.isNull()) {
-            return {};
-        }
-        painter.drawImage(qRound(imageConfig.x), qRound(imageConfig.y), image);
-    }
-    return full;
-}
-
-QList<MapImageConfig> MapViewer::fullTileConfigs(const MapConfig &config) const
-{
-    QList<MapImageConfig> images;
-    for (int row = 0; row < config.tile.rows; ++row) {
-        for (int col = 0; col < config.tile.cols; ++col) {
-            const int tileNumber = row * config.tile.cols + col + 1;
-            MapImageConfig image;
-            image.path = QStringLiteral("tile/%1.png").arg(tileNumber, 2, 10, QLatin1Char('0'));
-            image.x = col * config.tile.width;
-            image.y = row * config.tile.height;
-            images.append(image);
-        }
-    }
-    return images;
 }
 
 QImage MapViewer::readImage(const QString &path, bool required) const

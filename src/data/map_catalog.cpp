@@ -173,6 +173,8 @@ bool MapCatalog::loadMapConfig(const QString &mapId, const QString &indexPath, M
     config.tile.cols = tile.value(QStringLiteral("cols")).toInt(4);
     config.tile.rows = tile.value(QStringLiteral("rows")).toInt(4);
     config.topLayerId = object.value(QStringLiteral("top_layer_id")).toString(QStringLiteral("g"));
+    config.backgroundColor = object.value(QStringLiteral("background_color"))
+                                 .toString(QString::fromLatin1(DefaultMapBackgroundColor));
     config.rootPath = QStringLiteral(":/map/") + config.id;
 
     const QJsonArray layers = object.value(QStringLiteral("layers")).toArray();

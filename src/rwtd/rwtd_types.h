@@ -60,7 +60,6 @@ struct DecodedAction {
     QString flowId;
     TrafficDirection direction = TrafficDirection::Unknown;
     quint32 opcode = 0;
-    QString messageName;
     QByteArray payload;
 };
 

@@ -61,8 +61,6 @@ protected:
 private:
     void showLoadingScene(const QString &message = QStringLiteral("地图加载中"));
     bool loadMapImages(const MapConfig &config, QImage *fullImage, QMap<QString, QList<QPair<MapImageConfig, QImage>>> *layerImages);
-    QImage composeFullImage(const MapConfig &config) const;
-    QList<MapImageConfig> fullTileConfigs(const MapConfig &config) const;
     QImage readImage(const QString &path, bool required) const;
     void renderPathOverlays();
     void clearPathOverlayItems();

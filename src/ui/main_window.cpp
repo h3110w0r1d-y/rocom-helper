@@ -35,10 +35,6 @@ MainWindow::MainWindow(const RuntimeContext &runtimeContext, QWidget *parent)
     connectSignals();
     initializeServices();
 
-    if (!m_capture.loadSchemas(m_dataCenter.runtimeContext().trafficSchemaRoot())) {
-        m_statusLabel->setText(QStringLiteral("schema 加载失败"));
-    }
-
     m_saveTimer.setParent(this);
     connect(&m_saveTimer, &QTimer::timeout, &m_dataCenter, &DataCenter::saveIfDirty);
     m_saveTimer.start(5000);

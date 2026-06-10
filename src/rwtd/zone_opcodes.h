@@ -3,6 +3,8 @@
 
 #include <QtGlobal>
 
+#include <QSet>
+
 namespace rwtd {
 
 enum class ZoneOpcode : quint32 {
@@ -1491,5 +1493,8 @@ inline ZoneOpcode zoneOpcodeFromRaw(quint32 opcode)
 {
     return static_cast<ZoneOpcode>(opcode);
 }
+
+bool isKnownZoneOpcode(quint32 opcode);
+const QSet<quint32> &knownZoneOpcodes();
 
 } // namespace rwtd
