@@ -411,7 +411,9 @@ void DataCenter::handleEvent(const AppEvent &event)
         applyMarkerEvent(event);
         break;
     case EventType::CatchRecordAdded:
-        applyCatchRecord(event.payload);
+        if (event.catchRecord.has_value()) {
+            applyCatchRecord(*event.catchRecord);
+        }
         break;
     case EventType::ShinyPetDetected:
         emit shinyPetDetected(event.payload);
@@ -617,13 +619,8 @@ void DataCenter::applyMarkerEvent(const AppEvent &event)
         payload.value(QStringLiteral("extra")).toObject());
 }
 
-void DataCenter::applyCatchRecord(const QJsonObject &payload)
+void DataCenter::applyCatchRecord(const CatchRecord &record)
 {
-    CatchRecord record;
-    record.name = payload.value(QStringLiteral("name")).toString();
-    record.nature = intValue(payload, QStringLiteral("nature"));
-    record.talentRank = intValue(payload, QStringLiteral("talent_rank"), 1);
-    record.caughtAt = payload.value(QStringLiteral("caught_at")).toString(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")));
     m_catchState.records.prepend(record);
     emit catchStateChanged(m_catchState);
     emit catchRecordAdded(record);

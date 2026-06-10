@@ -94,6 +94,18 @@ QString decodedPetName(const Next::PetData &petData)
     return rawName;
 }
 
+CatchRecord catchRecordFromPetData(const Next::PetData &petData)
+{
+    CatchRecord record;
+    record.name = decodedPetName(petData);
+    record.nature = petData.has_nature() ? static_cast<int>(petData.nature()) : 0;
+    record.talentRank = petData.has_talent_rank() ? static_cast<int>(petData.talent_rank()) : 1;
+    record.specialityId = petData.has_speciality_id() ? static_cast<int>(petData.speciality_id()) : 0;
+    record.wearMedalConfId = petData.has_wear_medal_conf_id() ? static_cast<int>(petData.wear_medal_conf_id()) : 0;
+    record.caughtAt = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
+    return record;
+}
+
 QJsonArray petGidsToJsonArray(const google::protobuf::RepeatedField<quint32> &petGids)
 {
     QJsonArray array;
@@ -215,6 +227,12 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
     auto emitBusinessEvent = [&emitEvent](EventType type, const QJsonObject &payload) {
         emitEvent(type, payload, EventFlag::Persist | EventFlag::UpdateUi | EventFlag::PushSse);
     };
+    auto emitCatchRecordEvent = [this](const CatchRecord &record) {
+        emit eventCreated(makeCatchRecordAddedEvent(
+            EventSource::Traffic,
+            EventFlag::Persist | EventFlag::UpdateUi | EventFlag::PushSse,
+            record));
+    };
     auto emitExternalEvent = [&emitEvent](EventType type, const QJsonObject &payload) {
         emitEvent(type, payload, EventFlag::Persist | EventFlag::PushSse);
     };
@@ -254,19 +272,14 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         }
     };
 
-    auto processGoodsReward = [&processPetDataChanged, &emitBusinessEvent](const Next::GoodsReward &goodsReward) {
+    auto processGoodsReward = [&processPetDataChanged, &emitCatchRecordEvent](const Next::GoodsReward &goodsReward) {
         for (const Next::GoodsItem &reward : goodsReward.rewards()) {
             if (!reward.has_type() || reward.type() != dataconfig::GT_PET || !reward.has_pet_data()) {
                 continue;
             }
             const Next::PetData &petData = reward.pet_data();
             processPetDataChanged(petData);
-            emitBusinessEvent(EventType::CatchRecordAdded, {
-                {QStringLiteral("name"), decodedPetName(petData)},
-                {QStringLiteral("nature"), petData.has_nature() ? static_cast<int>(petData.nature()) : 0},
-                {QStringLiteral("talent_rank"), petData.has_talent_rank() ? static_cast<int>(petData.talent_rank()) : 1},
-                {QStringLiteral("caught_at"), QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"))},
-            });
+            emitCatchRecordEvent(catchRecordFromPetData(petData));
         }
     };
 

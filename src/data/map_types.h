@@ -167,6 +167,8 @@ struct CatchRecord {
     QString name;
     int nature = 0;
     int talentRank = 1;
+    int specialityId = 0;
+    int wearMedalConfId = 0;
     QString caughtAt;
 };
 

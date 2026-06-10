@@ -12,18 +12,26 @@ namespace app {
 CatchWindow::CatchWindow(DataCenter *dataCenter, QWidget *parent)
     : QWidget(parent)
     , m_dataCenter(dataCenter)
-    , m_table(new QTableWidget(0, 4, this))
+    , m_displayCatalog(PetDisplayCatalog::load())
+    , m_table(new QTableWidget(0, 6, this))
 {
     setWindowTitle(QStringLiteral("捕捉日志"));
     setCloseOnlyWindowControls(this, true);
-    resize(360, 420);
+    resize(640, 420);
 
-    m_table->setHorizontalHeaderLabels({QStringLiteral("名称"), QStringLiteral("性格"), QStringLiteral("天分"), QStringLiteral("时间")});
+    m_table->setHorizontalHeaderLabels({
+        QStringLiteral("名称"),
+        QStringLiteral("性格"),
+        QStringLiteral("天分"),
+        QStringLiteral("特长"),
+        QStringLiteral("奖牌"),
+        QStringLiteral("时间"),
+    });
     m_table->verticalHeader()->setVisible(false);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int column = 1; column < 4; ++column) {
+    for (int column = 1; column < 6; ++column) {
         m_table->horizontalHeader()->setSectionResizeMode(column, QHeaderView::ResizeToContents);
     }
 
@@ -48,8 +56,10 @@ void CatchWindow::renderTable()
         const CatchRecord &record = m_state.records.at(row);
         const QStringList values = {
             record.name,
-            QString::number(record.nature),
-            QString::number(record.talentRank),
+            m_displayCatalog.natureName(record.nature),
+            m_displayCatalog.talentRankName(record.talentRank),
+            m_displayCatalog.specialityName(record.specialityId),
+            m_displayCatalog.medalName(record.wearMedalConfId),
             record.caughtAt,
         };
         for (int column = 0; column < values.size(); ++column) {

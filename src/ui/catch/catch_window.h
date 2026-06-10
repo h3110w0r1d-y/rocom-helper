@@ -1,6 +1,7 @@
 #pragma once
 
 #include "data/data_center.h"
+#include "data/pet_display_catalog.h"
 
 #include <QTableWidget>
 #include <QWidget>
@@ -21,6 +22,7 @@ private:
 
     DataCenter *m_dataCenter = nullptr;
     CatchState m_state;
+    PetDisplayCatalog m_displayCatalog;
     QTableWidget *m_table = nullptr;
 };
 

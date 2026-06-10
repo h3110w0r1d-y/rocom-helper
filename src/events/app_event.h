@@ -53,6 +53,7 @@ struct AppEvent {
     QString name;
     QJsonObject payload;
     std::optional<PlayerPositionPayload> playerPosition;
+    std::optional<CatchRecord> catchRecord;
 };
 
 inline QString eventTypeName(EventType type)
@@ -137,11 +138,40 @@ inline AppEvent makePlayerPositionChangedEvent(
     return event;
 }
 
+inline QJsonObject catchRecordToJson(const CatchRecord &record)
+{
+    return {
+        {QStringLiteral("name"), record.name},
+        {QStringLiteral("nature"), record.nature},
+        {QStringLiteral("talent_rank"), record.talentRank},
+        {QStringLiteral("speciality_id"), record.specialityId},
+        {QStringLiteral("wear_medal_conf_id"), record.wearMedalConfId},
+        {QStringLiteral("caught_at"), record.caughtAt},
+    };
+}
+
+inline AppEvent makeCatchRecordAddedEvent(
+    EventSource source,
+    EventFlags flags,
+    const CatchRecord &record)
+{
+    AppEvent event;
+    event.type = EventType::CatchRecordAdded;
+    event.source = source;
+    event.flags = flags;
+    event.occurredAt = QDateTime::currentDateTimeUtc();
+    event.name = eventTypeName(EventType::CatchRecordAdded);
+    event.catchRecord = record;
+    return event;
+}
+
 inline QJsonObject appEventToJson(const AppEvent &event)
 {
     QJsonObject payload = event.payload;
     if (event.type == EventType::PlayerPositionChanged && event.playerPosition.has_value()) {
         payload = playerPositionToJson(*event.playerPosition);
+    } else if (event.type == EventType::CatchRecordAdded && event.catchRecord.has_value()) {
+        payload = catchRecordToJson(*event.catchRecord);
     }
 
     return {

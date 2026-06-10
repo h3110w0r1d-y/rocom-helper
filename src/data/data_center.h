@@ -103,7 +103,7 @@ private:
     bool resolveLocation(int gameX, int gameY, int gameZ, MapLocation *outLocation) const;
     bool syncMarkerSubtypes();
     void applyMarkerEvent(const AppEvent &event);
-    void applyCatchRecord(const QJsonObject &payload);
+    void applyCatchRecord(const CatchRecord &record);
     static int intValue(const QJsonObject &object, const QString &key, int defaultValue = 0);
     static bool boolValue(const QJsonObject &object, const QString &key, bool defaultValue = false);
 
