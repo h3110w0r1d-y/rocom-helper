@@ -105,6 +105,14 @@ struct MapLocation {
     double mapY = 0.0;
 };
 
+struct PlayerPositionPayload {
+    bool visible = true;
+    double rotation = 0.0;
+    int gameX = 0;
+    int gameY = 0;
+    int gameZ = 0;
+};
+
 struct PlayerState {
     bool visible = true;
     double rotation = 0.0;
@@ -168,7 +176,6 @@ struct CatchState {
 
 struct BaseState {
     int version = 1;
-    bool playerPositionLogEnabled = false;
 };
 
 MarkerTypeMap defaultMarkerTypes();
@@ -188,6 +195,7 @@ Q_DECLARE_METATYPE(app::MapLayerConfig)
 Q_DECLARE_METATYPE(app::MapConfig)
 Q_DECLARE_METATYPE(app::ResolvedMapLocation)
 Q_DECLARE_METATYPE(app::MapLocation)
+Q_DECLARE_METATYPE(app::PlayerPositionPayload)
 Q_DECLARE_METATYPE(app::PlayerState)
 Q_DECLARE_METATYPE(app::MarkerSubtypeConfig)
 Q_DECLARE_METATYPE(app::MarkerTypeConfig)

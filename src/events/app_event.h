@@ -1,9 +1,13 @@
 #pragma once
 
+#include "data/map_types.h"
+
 #include <QDateTime>
 #include <QJsonObject>
 #include <QMetaType>
 #include <QString>
+
+#include <optional>
 
 namespace app {
 
@@ -48,6 +52,7 @@ struct AppEvent {
     QDateTime occurredAt = QDateTime::currentDateTimeUtc();
     QString name;
     QJsonObject payload;
+    std::optional<PlayerPositionPayload> playerPosition;
 };
 
 inline QString eventTypeName(EventType type)
@@ -106,14 +111,45 @@ inline QString eventSourceName(EventSource source)
     return QStringLiteral("unknown");
 }
 
+inline QJsonObject playerPositionToJson(const PlayerPositionPayload &position)
+{
+    return {
+        {QStringLiteral("visible"), position.visible},
+        {QStringLiteral("rotation"), position.rotation},
+        {QStringLiteral("game_x"), position.gameX},
+        {QStringLiteral("game_y"), position.gameY},
+        {QStringLiteral("game_z"), position.gameZ},
+    };
+}
+
+inline AppEvent makePlayerPositionChangedEvent(
+    EventSource source,
+    EventFlags flags,
+    const PlayerPositionPayload &position)
+{
+    AppEvent event;
+    event.type = EventType::PlayerPositionChanged;
+    event.source = source;
+    event.flags = flags;
+    event.occurredAt = QDateTime::currentDateTimeUtc();
+    event.name = eventTypeName(EventType::PlayerPositionChanged);
+    event.playerPosition = position;
+    return event;
+}
+
 inline QJsonObject appEventToJson(const AppEvent &event)
 {
+    QJsonObject payload = event.payload;
+    if (event.type == EventType::PlayerPositionChanged && event.playerPosition.has_value()) {
+        payload = playerPositionToJson(*event.playerPosition);
+    }
+
     return {
         {QStringLiteral("type"), eventTypeName(event.type)},
         {QStringLiteral("source"), eventSourceName(event.source)},
         {QStringLiteral("occurredAt"), event.occurredAt.toString(Qt::ISODateWithMs)},
         {QStringLiteral("name"), event.name},
-        {QStringLiteral("payload"), event.payload},
+        {QStringLiteral("payload"), payload},
     };
 }
 

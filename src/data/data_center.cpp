@@ -37,6 +37,7 @@ DataCenter::DataCenter(QObject *parent)
     qRegisterMetaType<app::CatchState>("app::CatchState");
     qRegisterMetaType<app::CatchRecord>("app::CatchRecord");
     qRegisterMetaType<app::MapState>("app::MapState");
+    qRegisterMetaType<app::PlayerPositionPayload>("app::PlayerPositionPayload");
     qRegisterMetaType<app::PlayerState>("app::PlayerState");
     qRegisterMetaType<app::MapMarker>("app::MapMarker");
     qRegisterMetaType<app::MarkerTypeMap>("app::MarkerTypeMap");
@@ -88,7 +89,6 @@ void DataCenter::save()
     QDir().mkpath(QFileInfo(baseConfigPath()).absolutePath());
     QJsonObject object{
         {QStringLiteral("version"), m_baseState.version},
-        {QStringLiteral("player_position_log_enabled"), m_baseState.playerPositionLogEnabled},
     };
     QFile file(baseConfigPath());
     if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -154,16 +154,6 @@ QVector<MapLayerConfig> DataCenter::layersForMap(const QString &mapId) const
 void DataCenter::setRuntimeContext(const RuntimeContext &context)
 {
     m_runtimeContext = context;
-}
-
-void DataCenter::setPlayerPositionLogEnabled(bool enabled)
-{
-    if (m_baseState.playerPositionLogEnabled == enabled) {
-        return;
-    }
-    m_baseState.playerPositionLogEnabled = enabled;
-    markBaseDirty();
-    emit baseStateChanged(m_baseState);
 }
 
 void DataCenter::setFollowPlayerMap(bool enabled)
@@ -400,7 +390,6 @@ PlayerState DataCenter::updatePlayer(bool visible, double rotation, int gameX, i
         emit layerChanged(layerToEmit);
     }
     emit playerChanged(player);
-    recordPlayerPosition(player);
     return player;
 }
 
@@ -408,12 +397,10 @@ void DataCenter::handleEvent(const AppEvent &event)
 {
     switch (event.type) {
     case EventType::PlayerPositionChanged:
-        updatePlayer(
-            boolValue(event.payload, QStringLiteral("visible"), true),
-            event.payload.value(QStringLiteral("rotation")).toDouble(m_mapState.player.rotation),
-            intValue(event.payload, QStringLiteral("game_x")),
-            intValue(event.payload, QStringLiteral("game_y")),
-            intValue(event.payload, QStringLiteral("game_z")));
+        if (event.playerPosition.has_value()) {
+            const PlayerPositionPayload &position = *event.playerPosition;
+            updatePlayer(position.visible, position.rotation, position.gameX, position.gameY, position.gameZ);
+        }
         break;
     case EventType::MapMarkerAdded:
     case EventType::MapMarkerMoved:
@@ -467,7 +454,6 @@ void DataCenter::loadBaseState()
     }
     const QJsonObject object = doc.object();
     m_baseState.version = object.value(QStringLiteral("version")).toInt(1);
-    m_baseState.playerPositionLogEnabled = object.value(QStringLiteral("player_position_log_enabled")).toBool(false);
     m_baseDirty = false;
 }
 
@@ -483,23 +469,6 @@ QString DataCenter::baseConfigPath() const
 void DataCenter::markBaseDirty()
 {
     m_baseDirty = true;
-}
-
-void DataCenter::recordPlayerPosition(const PlayerState &player)
-{
-    if (!m_baseState.playerPositionLogEnabled) {
-        return;
-    }
-    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dataDir.isEmpty()) {
-        dataDir = QCoreApplication::applicationDirPath();
-    }
-    QFile file(QDir(dataDir).filePath(QStringLiteral("player_point.log")));
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        return;
-    }
-    QTextStream out(&file);
-    out << player.gameX << ',' << player.gameY << ',' << player.gameZ << '\n';
 }
 
 MapMarker *DataCenter::findMarker(const QString &markerId, bool *temporary)

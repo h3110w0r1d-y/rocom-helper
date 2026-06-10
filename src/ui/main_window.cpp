@@ -95,7 +95,6 @@ void MainWindow::buildUi()
     m_mapCombo->setToolTip(QStringLiteral("当前地图"));
     m_layerCombo = new QComboBox(this);
     m_layerCombo->setToolTip(QStringLiteral("当前层级"));
-    m_playerPositionLogCheckbox = new QCheckBox(QStringLiteral("记录坐标日志"), this);
     m_trailCheckbox = new QCheckBox(QStringLiteral("显示轨迹"), this);
     m_trailWidthSpin = new QSpinBox(this);
     m_trailWidthSpin->setRange(1, 500);
@@ -111,7 +110,6 @@ void MainWindow::buildUi()
     mapLayout->addWidget(m_miniMapCheckbox, 1, 0, 1, 2);
     mapLayout->addWidget(m_mapCombo, 2, 0);
     mapLayout->addWidget(m_layerCombo, 2, 1);
-    mapLayout->addWidget(m_playerPositionLogCheckbox, 3, 0, 1, 2);
     mapLayout->addWidget(m_trailCheckbox, 4, 0, 1, 2);
     mapLayout->addWidget(new QLabel(QStringLiteral("轨迹宽度"), this), 5, 0);
     mapLayout->addWidget(m_trailWidthSpin, 5, 1);
@@ -157,7 +155,6 @@ void MainWindow::connectSignals()
     connect(m_layerCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
         selectLayerFromCombo();
     });
-    connect(m_playerPositionLogCheckbox, &QCheckBox::toggled, &m_dataCenter, &DataCenter::setPlayerPositionLogEnabled);
     connect(m_trailCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setTrailRecordingEnabled);
     connect(m_trailWidthSpin, &QSpinBox::valueChanged, m_mapWindow, &MapWindow::setTrailWidth);
     connect(m_clearTrailButton, &QPushButton::clicked, m_mapWindow, &MapWindow::clearTrail);
@@ -351,8 +348,6 @@ QStringList MainWindow::extractSvgPaths(const QString &filePath) const
 
 void MainWindow::onBaseStateLoaded(const BaseState &state)
 {
-    QSignalBlocker blocker(m_playerPositionLogCheckbox);
-    m_playerPositionLogCheckbox->setChecked(state.playerPositionLogEnabled);
 }
 
 void MainWindow::onMapStateLoaded(const MapState &state)

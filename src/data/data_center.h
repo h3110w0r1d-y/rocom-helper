@@ -37,7 +37,6 @@ public:
     QVector<MapLayerConfig> layersForMap(const QString &mapId = {}) const;
 
     void setRuntimeContext(const RuntimeContext &context);
-    void setPlayerPositionLogEnabled(bool enabled);
     void setFollowPlayerMap(bool enabled);
     void setCurrentMap(const QString &mapId);
     void setCurrentLayer(const QString &layerId);
@@ -98,7 +97,6 @@ private:
     void loadBaseState();
     QString baseConfigPath() const;
     void markBaseDirty();
-    void recordPlayerPosition(const PlayerState &player);
     MapMarker *findMarker(const QString &markerId, bool *temporary = nullptr);
     const MapMarker *findMarker(const QString &markerId, bool *temporary = nullptr) const;
     MapLocation locationFromResolved(const ResolvedMapLocation &resolved) const;

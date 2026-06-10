@@ -369,13 +369,13 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         if (!parseMessage(payload, message) || !message.has_to_pos()) {
             return;
         }
-        emitUiEvent(EventType::PlayerPositionChanged, {
-            {QStringLiteral("game_x"), message.to_pos().has_x() ? message.to_pos().x() : 0},
-            {QStringLiteral("game_y"), message.to_pos().has_y() ? message.to_pos().y() : 0},
-            {QStringLiteral("game_z"), message.to_pos().has_z() ? message.to_pos().z() : 0},
-            {QStringLiteral("rotation"), message.has_to_rot() ? gameRotationToMapRotation(message.to_rot()) : 0.0},
-            {QStringLiteral("visible"), true},
-        });
+        PlayerPositionPayload position;
+        position.gameX = message.to_pos().has_x() ? message.to_pos().x() : 0;
+        position.gameY = message.to_pos().has_y() ? message.to_pos().y() : 0;
+        position.gameZ = message.to_pos().has_z() ? message.to_pos().z() : 0;
+        position.rotation = message.has_to_rot() ? gameRotationToMapRotation(message.to_rot()) : 0.0;
+        position.visible = true;
+        emit eventCreated(makePlayerPositionChangedEvent(EventSource::Traffic, EventFlag::UpdateUi, position));
         return;
     }
     case rwtd::ZoneOpcode::ZoneSceneClientEnterSceneFinishNtyAck: {
