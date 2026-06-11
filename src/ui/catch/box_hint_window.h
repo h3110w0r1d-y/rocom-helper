@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QLabel;
+class QPushButton;
 
 namespace app {
 
@@ -20,9 +21,13 @@ public slots:
 
 private:
     void clearHint();
+    void resetCount();
 
     QLabel *m_kindLabel = nullptr;
     QLabel *m_attrLabel = nullptr;
+    QLabel *m_countLabel = nullptr;
+    QPushButton *m_resetCountButton = nullptr;
+    int m_boxBreakCount = 0;
 };
 
 } // namespace app

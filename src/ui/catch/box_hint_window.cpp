@@ -4,7 +4,9 @@
 #include "ui/window_flags.h"
 
 #include <QFont>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QVBoxLayout>
 
 namespace app {
@@ -13,6 +15,8 @@ BoxHintWindow::BoxHintWindow(DataCenter *dataCenter, QWidget *parent)
     : QWidget(parent)
     , m_kindLabel(new QLabel(QStringLiteral("等待盒子结果"), this))
     , m_attrLabel(new QLabel(QStringLiteral("打掉盒子后会显示当前属性"), this))
+    , m_countLabel(new QLabel(QStringLiteral("已打掉: 0"), this))
+    , m_resetCountButton(new QPushButton(QStringLiteral("重置统计"), this))
 {
     setWindowTitle(QStringLiteral("盒子提示"));
     setCloseOnlyWindowControls(this, true);
@@ -24,6 +28,15 @@ BoxHintWindow::BoxHintWindow(DataCenter *dataCenter, QWidget *parent)
     m_kindLabel->setAlignment(Qt::AlignCenter);
 
     m_attrLabel->setAlignment(Qt::AlignCenter);
+    m_countLabel->setAlignment(Qt::AlignCenter);
+
+    connect(m_resetCountButton, &QPushButton::clicked, this, &BoxHintWindow::resetCount);
+
+    auto *countRow = new QHBoxLayout;
+    countRow->addStretch();
+    countRow->addWidget(m_countLabel);
+    countRow->addWidget(m_resetCountButton);
+    countRow->addStretch();
 
     auto *layout = new QVBoxLayout(this);
     layout->setSizeConstraint(QLayout::SetFixedSize);
@@ -31,6 +44,7 @@ BoxHintWindow::BoxHintWindow(DataCenter *dataCenter, QWidget *parent)
     layout->setSpacing(6);
     layout->addWidget(m_kindLabel);
     layout->addWidget(m_attrLabel);
+    layout->addLayout(countRow);
 
     if (dataCenter != nullptr) {
         connect(dataCenter, &DataCenter::boxHintUpdated, this, &BoxHintWindow::updateHint);
@@ -51,12 +65,21 @@ void BoxHintWindow::updateHint(const QJsonObject &payload)
 
     m_kindLabel->setText(kind);
     m_attrLabel->setText(QStringLiteral("+%1").arg(attrName));
+
+    ++m_boxBreakCount;
+    m_countLabel->setText(QStringLiteral("已打掉: %1").arg(m_boxBreakCount));
 }
 
 void BoxHintWindow::clearHint()
 {
     m_kindLabel->setText(QStringLiteral("等待盒子结果"));
     m_attrLabel->setText(QStringLiteral("打掉盒子后会显示当前属性"));
+}
+
+void BoxHintWindow::resetCount()
+{
+    m_boxBreakCount = 0;
+    m_countLabel->setText(QStringLiteral("已打掉: 0"));
 }
 
 } // namespace app
