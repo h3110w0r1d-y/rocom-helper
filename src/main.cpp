@@ -1,3 +1,4 @@
+#include "app_version.h"
 #include "ui/main_window.h"
 
 #include <QApplication>
@@ -383,10 +384,12 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setWindowIcon(QIcon(QStringLiteral(":/app.png")));
+    QCoreApplication::setApplicationName(QStringLiteral("洛克助手"));
+    QCoreApplication::setApplicationVersion(app::appVersionString());
 
     QLabel checkingLabel(QStringLiteral("正在检查更新"));
     checkingLabel.setAlignment(Qt::AlignCenter);
-    checkingLabel.setWindowTitle(QStringLiteral("洛克助手"));
+    checkingLabel.setWindowTitle(app::appWindowTitle());
     checkingLabel.resize(260, 90);
     checkingLabel.show();
     QApplication::processEvents();

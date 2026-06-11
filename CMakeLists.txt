@@ -1,6 +1,26 @@
 cmake_minimum_required(VERSION 3.27)
 
-project(roco_helper LANGUAGES CXX)
+project(roco_helper VERSION 1.4 LANGUAGES CXX)
+
+set(ROCO_APP_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
+
+set(ROCO_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${ROCO_GENERATED_DIR}")
+
+configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/app_version.h.in"
+        "${ROCO_GENERATED_DIR}/app_version_generated.h"
+        @ONLY
+)
+
+if(WIN32)
+    file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.ico" ROCO_APP_ICON)
+    configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.rc.in"
+            "${ROCO_GENERATED_DIR}/app.rc"
+            @ONLY
+    )
+endif()
 
 # 项目依赖：Qt 用于应用和界面，protobuf、PcapPlusPlus 用于抓包/解码。
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Sql HttpServer Network)
@@ -34,7 +54,20 @@ else()
     qt_add_executable(roco_helper WIN32
             src/main.cpp
             ${APP_SOURCES}
-            resources/windows/app.rc
+            "${ROCO_GENERATED_DIR}/app.rc"
+    )
+endif()
+
+set_target_properties(roco_helper PROPERTIES
+        OUTPUT_NAME "roco_helper"
+)
+
+if(APPLE)
+    set_target_properties(roco_helper PROPERTIES
+            MACOSX_BUNDLE_BUNDLE_NAME "洛克助手"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "com.h3110w0r1d.roco_helper"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${ROCO_APP_VERSION}"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${ROCO_APP_VERSION}"
     )
 endif()
 
@@ -48,6 +81,7 @@ qt_add_resources(roco_helper "app_resources"
 target_include_directories(roco_helper PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/rwtd/proto"
+        "${ROCO_GENERATED_DIR}"
 )
 
 target_link_libraries(roco_helper PRIVATE

@@ -1,5 +1,6 @@
 #include "main_window.h"
 
+#include "app_version.h"
 #include "ui/window_flags.h"
 
 #include <QDesktopServices>
@@ -28,7 +29,7 @@ MainWindow::MainWindow(const RuntimeContext &runtimeContext, QWidget *parent)
 {
     m_dataCenter.setRuntimeContext(runtimeContext);
 
-    setWindowTitle(QStringLiteral("洛克助手"));
+    setWindowTitle(appWindowTitle());
     resize(420, 420);
 
     buildUi();

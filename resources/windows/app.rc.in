@@ -1,0 +1,35 @@
+#pragma code_page(65001)
+
+IDI_ICON1 ICON "@ROCO_APP_ICON@"
+
+1 VERSIONINFO
+FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,0,0
+PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,0,0
+FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+FILEFLAGS 0x1L
+#else
+FILEFLAGS 0x0L
+#endif
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName", "Roco Helper"
+            VALUE "FileDescription", "洛克助手"
+            VALUE "FileVersion", "@ROCO_APP_VERSION@"
+            VALUE "InternalName", "roco_helper"
+            VALUE "OriginalFilename", "roco_helper.exe"
+            VALUE "ProductName", "洛克助手"
+            VALUE "ProductVersion", "@ROCO_APP_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END
