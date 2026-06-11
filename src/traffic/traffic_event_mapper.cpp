@@ -102,6 +102,9 @@ CatchRecord catchRecordFromPetData(const Next::PetData &petData)
     record.talentRank = petData.has_talent_rank() ? static_cast<int>(petData.talent_rank()) : 1;
     record.specialityId = petData.has_speciality_id() ? static_cast<int>(petData.speciality_id()) : 0;
     record.wearMedalConfId = petData.has_wear_medal_conf_id() ? static_cast<int>(petData.wear_medal_conf_id()) : 0;
+    record.voice = petData.has_voice() ? static_cast<int>(petData.voice()) : 0;
+    record.weight = petData.has_weight() ? static_cast<int>(petData.weight()) : 0;
+    record.baseConfId = petData.has_base_conf_id() ? static_cast<int>(petData.base_conf_id()) : 0;
     record.caughtAt = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
     return record;
 }

@@ -146,6 +146,9 @@ inline QJsonObject catchRecordToJson(const CatchRecord &record)
         {QStringLiteral("talent_rank"), record.talentRank},
         {QStringLiteral("speciality_id"), record.specialityId},
         {QStringLiteral("wear_medal_conf_id"), record.wearMedalConfId},
+        {QStringLiteral("voice"), record.voice},
+        {QStringLiteral("weight"), record.weight},
+        {QStringLiteral("base_conf_id"), record.baseConfId},
         {QStringLiteral("caught_at"), record.caughtAt},
     };
 }
