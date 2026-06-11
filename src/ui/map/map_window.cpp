@@ -9,6 +9,8 @@
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QKeySequence>
+#include <QShowEvent>
+#include <QHideEvent>
 #include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
@@ -194,6 +196,18 @@ void MapWindow::markerMoved(const QString &markerId, double x, double y)
         return;
     }
     m_dataCenter->updateMarker(markerId, true, qRound(gamePos.x()), true, qRound(gamePos.y()), false, 0);
+}
+
+void MapWindow::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    emit opcodeConsumerVisibilityChanged();
+}
+
+void MapWindow::hideEvent(QHideEvent *event)
+{
+    QWidget::hideEvent(event);
+    emit opcodeConsumerVisibilityChanged();
 }
 
 void MapWindow::closeEvent(QCloseEvent *event)

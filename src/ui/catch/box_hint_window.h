@@ -19,6 +19,14 @@ public:
 public slots:
     void updateHint(const QJsonObject &payload);
 
+signals:
+    void opcodeConsumerVisibilityChanged();
+
+protected:
+    void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
+
 private:
     void clearHint();
     void resetCount();

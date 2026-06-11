@@ -45,6 +45,7 @@ MainWindow::MainWindow(const RuntimeContext &runtimeContext, QWidget *parent)
         m_dataCenter.loadPersistentMarkers(m_database.queryMapMarkers());
     }
     m_mapWindow->show();
+    syncOpcodeProfiles();
     QTimer::singleShot(0, this, &MainWindow::toggleTraffic);
 }
 
@@ -170,6 +171,14 @@ void MainWindow::connectSignals()
     connect(&m_dataCenter, &DataCenter::markerTypesChanged, this, &MainWindow::renderMarkerTypeControls);
     connect(&m_dataCenter, &DataCenter::shinyPetDetected, this, &MainWindow::showShinyAlert);
 
+    m_capture.setOpcodeFilter(&m_opcodeFilter);
+    m_trafficEventMapper.setOpcodeFilter(&m_opcodeFilter);
+    connect(&m_opcodeFilter, &rwtd::OpcodeFilter::enabledOpcodesChanged,
+            &m_capture, &rwtd::LiveCaptureService::updateEnabledOpcodes);
+    connect(m_mapWindow, &MapWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
+    connect(m_catchWindow, &CatchWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
+    connect(m_boxHintWindow, &BoxHintWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
+
     connect(&m_capture, &rwtd::LiveCaptureService::statusChanged, this, [this](const QString &message) {
         m_statusLabel->setText(message);
     });
@@ -291,6 +300,13 @@ void MainWindow::showBoxHint()
     m_boxHintWindow->show();
     m_boxHintWindow->raise();
     m_boxHintWindow->activateWindow();
+}
+
+void MainWindow::syncOpcodeProfiles()
+{
+    m_opcodeFilter.setUiProfileEnabled(rwtd::OpcodeProfile::Map, m_mapWindow->isVisible());
+    m_opcodeFilter.setUiProfileEnabled(rwtd::OpcodeProfile::CatchLog, m_catchWindow->isVisible());
+    m_opcodeFilter.setUiProfileEnabled(rwtd::OpcodeProfile::BoxHint, m_boxHintWindow->isVisible());
 }
 
 void MainWindow::openPetFilter()

@@ -1,7 +1,7 @@
 #include "live_capture_service.h"
 
+#include "opcode_registry.h"
 #include "record_decoder.h"
-#include "rwtd/zone_opcodes.h"
 
 #include <QCoreApplication>
 #include <QByteArray>
@@ -395,8 +395,26 @@ bool isDefaultRouteDevice(const pcpp::PcapLiveDevice *device, const QString &def
 LiveCaptureService::LiveCaptureService(QObject *parent)
     : QObject(parent)
     , m_keyCache(defaultKeyPath())
+    , m_enabledOpcodes(allUsedOpcodes())
 {
     qRegisterMetaType<rwtd::DecodedAction>("rwtd::DecodedAction");
+}
+
+void LiveCaptureService::setOpcodeFilter(OpcodeFilter *filter)
+{
+    QMutexLocker locker(&m_mutex);
+    m_opcodeFilter = filter;
+    if (filter != nullptr) {
+        m_enabledOpcodes = filter->enabledOpcodes();
+    } else {
+        m_enabledOpcodes = allUsedOpcodes();
+    }
+}
+
+void LiveCaptureService::updateEnabledOpcodes(const QSet<quint32> &opcodes)
+{
+    QMutexLocker locker(&m_mutex);
+    m_enabledOpcodes = opcodes;
 }
 
 LiveCaptureService::~LiveCaptureService()
@@ -590,9 +608,9 @@ void LiveCaptureService::handleTgcpPacket(const TgcpPacket &packet)
         return;
     }
 
-    const std::optional<DecryptedRecord> record = DataRecordDecoder::decryptAndParse(key, packet, knownZoneOpcodes());
+    const std::optional<DecryptedRecord> record = DataRecordDecoder::decryptAndParse(key, packet, m_enabledOpcodes);
     m_processedPackets.insert(packetKey);
-    if (!record.has_value() || !isKnownZoneOpcode(record->opcode)) {
+    if (!record.has_value()) {
         return;
     }
 
@@ -671,6 +689,7 @@ void LiveCaptureService::rememberFlowKey(const QString &flowId, const QByteArray
     if (key.size() != 16) {
         return;
     }
+    m_flowKeys.clear();
     m_flowKeys.insert(flowId, key);
     m_keyCache.rememberKey(flowId, key);
 }

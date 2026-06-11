@@ -5,6 +5,10 @@
 
 #include <QObject>
 
+namespace rwtd {
+class OpcodeFilter;
+}
+
 namespace app {
 
 class TrafficEventMapper : public QObject {
@@ -13,12 +17,16 @@ class TrafficEventMapper : public QObject {
 public:
     explicit TrafficEventMapper(QObject *parent = nullptr);
 
+    void setOpcodeFilter(rwtd::OpcodeFilter *filter);
+
 public slots:
     void mapDecodedAction(const rwtd::DecodedAction &action);
 
 signals:
     void eventCreated(const app::AppEvent &event);
+
+private:
+    rwtd::OpcodeFilter *m_opcodeFilter = nullptr;
 };
 
 } // namespace app
-

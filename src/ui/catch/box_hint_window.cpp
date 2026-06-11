@@ -3,10 +3,13 @@
 #include "data/data_center.h"
 #include "ui/window_flags.h"
 
+#include <QCloseEvent>
 #include <QFont>
+#include <QHideEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QVBoxLayout>
 
 namespace app {
@@ -51,6 +54,24 @@ BoxHintWindow::BoxHintWindow(DataCenter *dataCenter, QWidget *parent)
     }
 
     adjustSize();
+}
+
+void BoxHintWindow::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    emit opcodeConsumerVisibilityChanged();
+}
+
+void BoxHintWindow::hideEvent(QHideEvent *event)
+{
+    QWidget::hideEvent(event);
+    emit opcodeConsumerVisibilityChanged();
+}
+
+void BoxHintWindow::closeEvent(QCloseEvent *event)
+{
+    event->ignore();
+    hide();
 }
 
 void BoxHintWindow::updateHint(const QJsonObject &payload)

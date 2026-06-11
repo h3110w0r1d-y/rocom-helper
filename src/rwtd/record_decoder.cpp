@@ -62,13 +62,13 @@ QByteArray stripTsf4gPadding(const QByteArray &data)
 std::optional<DecryptedRecord> DataRecordDecoder::decryptAndParse(
     const QByteArray &key,
     const TgcpPacket &packet,
-    const QSet<quint32> &knownOpcodes)
+    const QSet<quint32> &enabledOpcodes)
 {
     const QByteArray plaintext = decryptDataBody(key, packet.body);
     if (plaintext.isEmpty()) {
         return std::nullopt;
     }
-    return parseDecryptedRecord(packet.direction, plaintext, knownOpcodes);
+    return parseDecryptedRecord(packet.direction, plaintext, enabledOpcodes);
 }
 
 QByteArray DataRecordDecoder::decryptDataBody(const QByteArray &key, const QByteArray &body)
@@ -97,51 +97,63 @@ QByteArray DataRecordDecoder::decryptDataBody(const QByteArray &key, const QByte
     return plaintext;
 }
 
-std::optional<DecryptedRecord> DataRecordDecoder::parseDecryptedRecord(
+std::optional<DataRecordDecoder::PlaintextHeader> DataRecordDecoder::parsePlaintextHeader(
     const TrafficDirection direction,
-    const QByteArray &plaintext,
-    const QSet<quint32> &knownOpcodes)
+    const QByteArray &plaintext)
 {
     if (plaintext.size() >= 0x1e
         && plaintext.mid(4, 2) == QByteArray::fromRawData("\x55\xaa", 2)
         && plaintext.mid(24, 2) == QByteArray::fromRawData("\x39\x63", 2)) {
-        DecryptedRecord record;
-        record.payload = stripTsf4gPadding(plaintext.mid(30));
-        if (direction == TrafficDirection::ClientToServer) {
-            record.opcode = normalizeClientOpcode(readBe32(plaintext, 20));
-        } else {
-            record.opcode = readBe32(plaintext, 16) & 0xffff;
-        }
-        return record;
+        const quint32 opcode = direction == TrafficDirection::ClientToServer
+            ? normalizeClientOpcode(readBe32(plaintext, 20))
+            : readBe32(plaintext, 16) & 0xffff;
+        return PlaintextHeader{opcode, 30};
     }
 
     if (direction == TrafficDirection::ServerToClient
         && plaintext.size() >= 10
         && plaintext.mid(4, 2) == QByteArray::fromRawData("\x55\xaa", 2)) {
-        return DecryptedRecord{readBe32(plaintext, 0), stripTsf4gPadding(plaintext.mid(10))};
+        return PlaintextHeader{readBe32(plaintext, 0), 10};
     }
 
     if (direction == TrafficDirection::ClientToServer
         && plaintext.size() >= 14
         && plaintext.mid(8, 2) == QByteArray::fromRawData("\x39\x63", 2)) {
-        return DecryptedRecord{normalizeClientOpcode(readBe32(plaintext, 4)), stripTsf4gPadding(plaintext.mid(14))};
+        return PlaintextHeader{normalizeClientOpcode(readBe32(plaintext, 4)), 14};
     }
 
     if (direction == TrafficDirection::ClientToServer
         && plaintext.size() >= 16
         && plaintext.left(6) == QByteArray::fromRawData("\x00\x00\x00\x02\x00\x02", 6)
         && plaintext.mid(8, 2) == QByteArray::fromRawData("\x45\xf0", 2)) {
-        return DecryptedRecord{readBe16(plaintext, 6), stripTsf4gPadding(plaintext.mid(14))};
+        return PlaintextHeader{readBe16(plaintext, 6), 14};
     }
 
     if (direction == TrafficDirection::ClientToServer && plaintext.size() >= 14) {
-        const quint32 opcode = readBe16(plaintext, 6);
-        if (knownOpcodes.contains(opcode)) {
-            return DecryptedRecord{opcode, stripTsf4gPadding(plaintext.mid(14))};
-        }
+        return PlaintextHeader{readBe16(plaintext, 6), 14};
     }
 
     return std::nullopt;
+}
+
+std::optional<DecryptedRecord> DataRecordDecoder::parseDecryptedRecord(
+    const TrafficDirection direction,
+    const QByteArray &plaintext,
+    const QSet<quint32> &enabledOpcodes)
+{
+    const std::optional<PlaintextHeader> header = parsePlaintextHeader(direction, plaintext);
+    if (!header.has_value() || !enabledOpcodes.contains(header->opcode)) {
+        return std::nullopt;
+    }
+
+    if (header->payloadOffset > plaintext.size()) {
+        return std::nullopt;
+    }
+
+    return DecryptedRecord{
+        header->opcode,
+        stripTsf4gPadding(plaintext.mid(header->payloadOffset)),
+    };
 }
 
 } // namespace rwtd

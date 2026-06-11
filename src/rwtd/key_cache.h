@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QList>
 #include <QByteArray>
 #include <QString>
 
@@ -21,11 +20,9 @@ private:
 
     void load();
     void save() const;
-    void trim();
 
     QString m_path;
-    QList<Entry> m_entries;
-    QByteArray m_legacyLastKey;
+    Entry m_entry;
 };
 
 } // namespace rwtd

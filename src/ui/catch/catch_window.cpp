@@ -3,7 +3,10 @@
 #include "ui/window_flags.h"
 
 #include <QAbstractItemView>
+#include <QCloseEvent>
 #include <QHeaderView>
+#include <QHideEvent>
+#include <QShowEvent>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 
@@ -49,6 +52,24 @@ void CatchWindow::applyState(const CatchState &state)
 {
     m_state = state;
     renderTable();
+}
+
+void CatchWindow::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    emit opcodeConsumerVisibilityChanged();
+}
+
+void CatchWindow::hideEvent(QHideEvent *event)
+{
+    QWidget::hideEvent(event);
+    emit opcodeConsumerVisibilityChanged();
+}
+
+void CatchWindow::closeEvent(QCloseEvent *event)
+{
+    event->ignore();
+    hide();
 }
 
 void CatchWindow::renderTable()

@@ -10,7 +10,8 @@
 
 #include <cmath>
 
-#include "rwtd/zone_opcodes.h"
+#include "rwtd/opcode_filter.h"
+#include "rwtd/opcode_registry.h"
 
 #include "battle_proto.pb.h"
 #include "space_action.pb.h"
@@ -212,8 +213,19 @@ TrafficEventMapper::TrafficEventMapper(QObject *parent)
 {
 }
 
+void TrafficEventMapper::setOpcodeFilter(rwtd::OpcodeFilter *filter)
+{
+    m_opcodeFilter = filter;
+}
+
 void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
 {
+    const QHash<quint32, rwtd::ZoneOpcode> &opcodeLookup = rwtd::usedZoneOpcodeByRaw();
+    const auto mappedOpcode = opcodeLookup.constFind(action.opcode);
+    if (mappedOpcode == opcodeLookup.constEnd()) {
+        return;
+    }
+
     auto emitEvent = [this](EventType type, const QJsonObject &payload, EventFlags flags) {
         AppEvent event;
         event.type = type;
@@ -231,6 +243,10 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         emitEvent(type, payload, EventFlag::Persist | EventFlag::UpdateUi | EventFlag::PushSse);
     };
     auto emitCatchRecordEvent = [this](const CatchRecord &record) {
+        if (m_opcodeFilter != nullptr
+            && !m_opcodeFilter->isUiProfileEnabled(rwtd::OpcodeProfile::CatchLog)) {
+            return;
+        }
         emit eventCreated(makeCatchRecordAddedEvent(
             EventSource::Traffic,
             EventFlag::Persist | EventFlag::UpdateUi | EventFlag::PushSse,
@@ -379,7 +395,7 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
 
     const QByteArray &payload = action.payload;
 
-    switch (rwtd::zoneOpcodeFromRaw(action.opcode)) {
+    switch (*mappedOpcode) {
     case rwtd::ZoneOpcode::ZoneSceneMoveReq: {
         Next::ZoneSceneMoveReq message;
         if (!parseMessage(payload, message) || !message.has_to_pos()) {

@@ -5,6 +5,7 @@
 #include "http/http_server_service.h"
 #include "http/sse_broadcaster.h"
 #include "rwtd/live_capture_service.h"
+#include "rwtd/opcode_filter.h"
 #include "storage/database_service.h"
 #include "traffic/traffic_event_mapper.h"
 #include "ui/catch/box_hint_window.h"
@@ -58,11 +59,13 @@ private:
     void renderMarkerTypeControls(const MarkerTypeMap &markerTypes);
     void showShinyAlert(const QJsonObject &payload);
     void forgetAlert(QMessageBox *dialog);
+    void syncOpcodeProfiles();
 
     DataCenter m_dataCenter;
     MapWindow *m_mapWindow = nullptr;
     CatchWindow *m_catchWindow = nullptr;
     BoxHintWindow *m_boxHintWindow = nullptr;
+    rwtd::OpcodeFilter m_opcodeFilter;
     rwtd::LiveCaptureService m_capture;
     EventDispatcher m_eventDispatcher;
     TrafficEventMapper m_trafficEventMapper;

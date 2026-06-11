@@ -13,12 +13,25 @@
 namespace rwtd {
 namespace {
 
-constexpr qsizetype MaxCachedKeys = 10;
-
 QByteArray keyFromJsonValue(const QJsonValue &value)
 {
     const QByteArray key = QByteArray::fromHex(value.toString().toLatin1());
     return key.size() == 16 ? key : QByteArray();
+}
+
+bool entryFromJsonObject(const QJsonObject &object, QString *flowId, QByteArray *key)
+{
+    if (flowId == nullptr || key == nullptr) {
+        return false;
+    }
+    const QString parsedFlowId = object.value(QStringLiteral("flow_id")).toString().trimmed();
+    const QByteArray parsedKey = keyFromJsonValue(object.value(QStringLiteral("key")));
+    if (parsedFlowId.isEmpty() || parsedKey.size() != 16) {
+        return false;
+    }
+    *flowId = parsedFlowId;
+    *key = parsedKey;
+    return true;
 }
 
 } // namespace
@@ -31,18 +44,10 @@ AesKeyCache::AesKeyCache(QString path)
 
 QByteArray AesKeyCache::keyForFlow(const QString &flowId) const
 {
-    for (const Entry &entry : m_entries) {
-        if (entry.flowId == flowId && entry.key.size() == 16) {
-            return entry.key;
-        }
+    if (m_entry.flowId == flowId && m_entry.key.size() == 16) {
+        return m_entry.key;
     }
-    if (m_legacyLastKey.size() == 16) {
-        return m_legacyLastKey;
-    }
-
-    return m_entries.isEmpty() || m_entries.constFirst().key.size() != 16
-        ? QByteArray()
-        : m_entries.constFirst().key;
+    return QByteArray();
 }
 
 void AesKeyCache::rememberKey(const QString &flowId, const QByteArray &key)
@@ -50,31 +55,17 @@ void AesKeyCache::rememberKey(const QString &flowId, const QByteArray &key)
     if (m_path.isEmpty() || key.size() != 16) {
         return;
     }
-    m_legacyLastKey.clear();
-
-    for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
-        if (it->flowId == flowId) {
-            if (it == m_entries.begin() && it->key == key) {
-                return;
-            }
-            Entry entry{flowId, key};
-            m_entries.erase(it);
-            m_entries.prepend(entry);
-            trim();
-            save();
-            return;
-        }
+    if (m_entry.flowId == flowId && m_entry.key == key) {
+        return;
     }
 
-    m_entries.prepend({flowId, key});
-    trim();
+    m_entry = {flowId, key};
     save();
 }
 
 void AesKeyCache::load()
 {
-    m_entries.clear();
-    m_legacyLastKey.clear();
+    m_entry = {};
     if (m_path.isEmpty()) {
         return;
     }
@@ -91,20 +82,20 @@ void AesKeyCache::load()
             if (!value.isObject()) {
                 continue;
             }
-            const QJsonObject object = value.toObject();
-            const QString flowId = object.value(QStringLiteral("flow_id")).toString().trimmed();
-            const QByteArray key = keyFromJsonValue(object.value(QStringLiteral("key")));
-            if (!flowId.isEmpty() && key.size() == 16) {
-                m_entries.append({flowId, key});
+            QString flowId;
+            QByteArray key;
+            if (entryFromJsonObject(value.toObject(), &flowId, &key)) {
+                m_entry = {flowId, key};
+                return;
             }
         }
-        trim();
         return;
     }
 
     if (doc.isObject()) {
         const QJsonObject object = doc.object();
-        m_legacyLastKey = keyFromJsonValue(object.value(QStringLiteral("_last")));
+        Entry latest;
+        bool hasLatest = false;
 
         for (auto it = object.begin(); it != object.end(); ++it) {
             if (it.key() == QStringLiteral("_last")) {
@@ -112,10 +103,14 @@ void AesKeyCache::load()
             }
             const QByteArray key = keyFromJsonValue(it.value());
             if (key.size() == 16) {
-                m_entries.append({it.key(), key});
+                latest = {it.key(), key};
+                hasLatest = true;
             }
         }
-        trim();
+
+        if (hasLatest) {
+            m_entry = latest;
+        }
     }
 }
 
@@ -127,13 +122,10 @@ void AesKeyCache::save() const
     }
 
     QJsonArray array;
-    for (const Entry &entry : m_entries) {
-        if (entry.flowId.isEmpty() || entry.key.size() != 16) {
-            continue;
-        }
+    if (!m_entry.flowId.isEmpty() && m_entry.key.size() == 16) {
         array.append(QJsonObject{
-            {QStringLiteral("flow_id"), entry.flowId},
-            {QStringLiteral("key"), QString::fromLatin1(entry.key.toHex())},
+            {QStringLiteral("flow_id"), m_entry.flowId},
+            {QStringLiteral("key"), QString::fromLatin1(m_entry.key.toHex())},
         });
     }
 
@@ -142,13 +134,6 @@ void AesKeyCache::save() const
         return;
     }
     file.write(QJsonDocument(array).toJson(QJsonDocument::Indented));
-}
-
-void AesKeyCache::trim()
-{
-    while (m_entries.size() > MaxCachedKeys) {
-        m_entries.removeLast();
-    }
 }
 
 } // namespace rwtd
