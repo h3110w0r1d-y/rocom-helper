@@ -384,7 +384,7 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setWindowIcon(QIcon(QStringLiteral(":/app.png")));
-    QCoreApplication::setApplicationName(QStringLiteral("洛克助手"));
+    QCoreApplication::setApplicationName(QStringLiteral("roco_helper"));
     QCoreApplication::setApplicationVersion(app::appVersionString());
 
     QLabel checkingLabel(QStringLiteral("正在检查更新"));
