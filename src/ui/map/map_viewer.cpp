@@ -21,6 +21,7 @@ namespace app {
 namespace {
 
 constexpr int PathOverlayWidth = 6;
+constexpr int PathOverlayZ = 45;
 constexpr qint64 PathRotationLogIntervalMs = 250;
 const QColor PathOverlayColor(255, 77, 79, 210);
 
@@ -611,7 +612,7 @@ void MapViewer::renderPathOverlays()
         auto *item = new QGraphicsPathItem(parsed.path, m_mapRootItem);
         item->setPen(pen);
         item->setBrush(Qt::NoBrush);
-        item->setZValue(35);
+        item->setZValue(PathOverlayZ);
         m_pathOverlayItems.append(item);
     }
 }

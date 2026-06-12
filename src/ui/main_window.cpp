@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QShowEvent>
 #include <QUrl>
@@ -21,6 +22,34 @@
 #include <QXmlStreamReader>
 
 namespace app {
+namespace {
+
+QString pointsToPathData(const QString &points, bool closed)
+{
+    static const QRegularExpression numberRe(
+        QStringLiteral("[-+]?(?:\\d*\\.\\d+|\\d+\\.?)(?:[eE][-+]?\\d+)?"));
+
+    QStringList numbers;
+    QRegularExpressionMatchIterator it = numberRe.globalMatch(points);
+    while (it.hasNext()) {
+        numbers.append(it.next().captured(0));
+    }
+    if (numbers.size() < 4 || numbers.size() % 2 != 0) {
+        return {};
+    }
+
+    QString pathData = QStringLiteral("M %1 %2").arg(numbers.at(0), numbers.at(1));
+    for (int index = 2; index < numbers.size(); index += 2) {
+        pathData += QStringLiteral(" L %1 %2").arg(numbers.at(index), numbers.at(index + 1));
+    }
+    if (closed) {
+        pathData += QStringLiteral(" Z");
+    }
+    return pathData;
+}
+
+} // namespace
+
 MainWindow::MainWindow(const RuntimeContext &runtimeContext, QWidget *parent)
     : QWidget(parent)
     , m_mapWindow(new MapWindow(&m_dataCenter))
@@ -324,17 +353,17 @@ void MainWindow::openPetFilter()
 
 void MainWindow::importPathOverlay()
 {
-    const QString filePath = QFileDialog::getOpenFileName(this, QStringLiteral("导入 path"), QString(), QStringLiteral("SVG 文件 (*.svg);;所有文件 (*)"));
+    const QString filePath = QFileDialog::getOpenFileName(this, QStringLiteral("导入路径"), QString(), QStringLiteral("SVG 文件 (*.svg);;所有文件 (*)"));
     if (filePath.isEmpty()) {
         return;
     }
     const QStringList paths = extractSvgPaths(filePath);
     if (paths.isEmpty()) {
-        QMessageBox::information(this, QStringLiteral("导入 path"), QStringLiteral("没有找到可导入的 path。"));
+        QMessageBox::information(this, QStringLiteral("导入路径"), QStringLiteral("没有找到可导入的 path、polyline 或 polygon。"));
         return;
     }
     const int count = m_mapWindow->setPathOverlays(paths);
-    m_statusLabel->setText(QStringLiteral("已导入 %1 条 path").arg(count));
+    m_statusLabel->setText(QStringLiteral("已导入 %1 条路径").arg(count));
 }
 
 QStringList MainWindow::extractSvgPaths(const QString &filePath) const
@@ -349,8 +378,20 @@ QStringList MainWindow::extractSvgPaths(const QString &filePath) const
     QXmlStreamReader reader(&file);
     while (!reader.atEnd()) {
         reader.readNext();
-        if (reader.isStartElement() && reader.name().toString().endsWith(QStringLiteral("path"))) {
+        if (!reader.isStartElement()) {
+            continue;
+        }
+
+        const QString tagName = reader.name().toString();
+        if (tagName == QStringLiteral("path")) {
             const QString pathData = reader.attributes().value(QStringLiteral("d")).toString().trimmed();
+            if (!pathData.isEmpty()) {
+                paths.append(pathData);
+            }
+        } else if (tagName == QStringLiteral("polyline") || tagName == QStringLiteral("polygon")) {
+            const QString pathData = pointsToPathData(
+                reader.attributes().value(QStringLiteral("points")).toString(),
+                tagName == QStringLiteral("polygon"));
             if (!pathData.isEmpty()) {
                 paths.append(pathData);
             }
