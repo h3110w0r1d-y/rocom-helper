@@ -40,6 +40,7 @@ public:
     void centerOnMapPoint(double x, double y);
     void setSelectedMarkers(const QSet<QString> &markerIds);
     QSet<QString> selectedMarkerIds() const;
+    bool exportFullImage(const QString &filePath);
 
     const QMap<QString, DraggableMarkerItem *> &markers() const;
 

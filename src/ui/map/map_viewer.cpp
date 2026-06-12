@@ -366,6 +366,31 @@ QSet<QString> MapViewer::selectedMarkerIds() const
     return ids;
 }
 
+bool MapViewer::exportFullImage(const QString &filePath)
+{
+    if (filePath.trimmed().isEmpty() || !m_mapLoaded || m_mapConfig == nullptr || m_mapRootItem == nullptr) {
+        return false;
+    }
+
+    const int width = m_mapConfig->width();
+    const int height = m_mapConfig->height();
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+
+    QImage image(QSize(width, height), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHints(renderHints());
+    const QRectF targetRect(0, 0, width, height);
+    const QRectF sourceRect = m_mapRootItem->mapRectToScene(m_mapRootItem->boundingRect());
+    m_scene->render(&painter, targetRect, sourceRect, Qt::IgnoreAspectRatio);
+    painter.end();
+
+    return image.save(filePath);
+}
+
 const QMap<QString, DraggableMarkerItem *> &MapViewer::markers() const
 {
     return m_markers;

@@ -6,9 +6,13 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QDebug>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QKeySequence>
+#include <QMessageBox>
 #include <QShowEvent>
 #include <QHideEvent>
 #include <QSizePolicy>
@@ -63,6 +67,9 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
     m_centerButton = new QPushButton(QStringLiteral("居中"), this);
     connect(m_centerButton, &QPushButton::clicked, this, &MapWindow::centerPlayer);
 
+    m_exportButton = new QPushButton(QStringLiteral("导出图片"), this);
+    connect(m_exportButton, &QPushButton::clicked, this, &MapWindow::exportCurrentMapImage);
+
     m_deleteButton = new QPushButton(QStringLiteral("删除选中"), this);
     m_deleteButton->setEnabled(false);
     connect(m_deleteButton, &QPushButton::clicked, this, &MapWindow::deleteSelectedMarkers);
@@ -96,6 +103,7 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
     topLayout->addWidget(m_followCheckbox);
     topLayout->addWidget(m_miniMapCheckbox);
     topLayout->addWidget(m_centerButton);
+    topLayout->addWidget(m_exportButton);
     topLayout->addWidget(m_editBar, 1);
 
     auto *layout = new QVBoxLayout(this);
@@ -500,6 +508,37 @@ void MapWindow::deleteSelectedMarkers()
         m_dataCenter->deleteMarker(markerId);
     }
     setSelectedMarkers({});
+}
+
+void MapWindow::exportCurrentMapImage()
+{
+    QString baseName = m_mapCombo->currentText().trimmed();
+    if (baseName.isEmpty()) {
+        baseName = m_currentMapId.isEmpty() ? QStringLiteral("map") : m_currentMapId;
+    }
+    const QString invalidChars = QStringLiteral("\\/:*?\"<>|");
+    for (qsizetype i = 0; i < baseName.size(); ++i) {
+        if (invalidChars.contains(baseName.at(i))) {
+            baseName[i] = QLatin1Char('_');
+        }
+    }
+
+    const QString defaultPath = QDir::home().filePath(QStringLiteral("%1.png").arg(baseName));
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("导出地图图片"),
+        defaultPath,
+        QStringLiteral("PNG 图片 (*.png);;JPEG 图片 (*.jpg *.jpeg);;所有文件 (*)"));
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    if (QFileInfo(filePath).suffix().isEmpty()) {
+        filePath += QStringLiteral(".png");
+    }
+    if (!m_viewer->exportFullImage(filePath)) {
+        QMessageBox::warning(this, QStringLiteral("导出失败"), QStringLiteral("地图图片导出失败，请检查保存路径。"));
+    }
 }
 
 void MapWindow::setSelectedMarkers(const QSet<QString> &markerIds)

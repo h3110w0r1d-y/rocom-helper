@@ -58,6 +58,7 @@ private:
     int currentLayerDefaultZ() const;
     void setFollowPlayer(bool enabled);
     void centerPlayer();
+    void exportCurrentMapImage();
     void deleteSelectedMarkers();
     void setSelectedMarkers(const QSet<QString> &markerIds);
     void refreshDeleteEnabled();
@@ -74,6 +75,7 @@ private:
     QCheckBox *m_temporaryMarkerCheckbox = nullptr;
     QPushButton *m_clearTemporaryButton = nullptr;
     QPushButton *m_centerButton = nullptr;
+    QPushButton *m_exportButton = nullptr;
     QPushButton *m_deleteButton = nullptr;
     QWidget *m_editBar = nullptr;
     QWidget *m_topBar = nullptr;
