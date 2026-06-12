@@ -134,10 +134,10 @@ QString PetDisplayCatalog::weightText(int baseConfId, int weight) const
     const double kg = weight / 1000.0;
     const auto it = m_weightRanges.constFind(baseConfId);
     if (it != m_weightRanges.constEnd()) {
-        if (kg >= it->upper) {
+        if (weight >= it->upper) {
             return QStringLiteral("大块头");
         }
-        if (kg <= it->lower) {
+        if (weight <= it->lower) {
             return QStringLiteral("小不点");
         }
     }
