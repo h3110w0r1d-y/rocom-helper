@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
 
-project(roco_helper VERSION 1.5 LANGUAGES CXX)
+project(roco_helper VERSION 1.6 LANGUAGES CXX)
 
 set(ROCO_APP_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
