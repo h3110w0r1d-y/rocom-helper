@@ -122,7 +122,7 @@ void MainWindow::buildUi()
 
     auto *s2Group = new QGroupBox(QStringLiteral("其他功能"), this);
     auto *s2Layout = new QGridLayout(s2Group);
-    m_petFilterButton = new QPushButton(QStringLiteral("宠物筛选"), this);
+    m_petFilterButton = new QPushButton(QStringLiteral("宠物管理"), this);
     m_showBoxHintButton = new QPushButton(QStringLiteral("盒子提示"), this);
     m_showCatchButton = new QPushButton(QStringLiteral("捕捉日志"), this);
     s2Layout->addWidget(m_petFilterButton, 0, 0);
@@ -314,11 +314,11 @@ void MainWindow::openPetFilter()
 {
     const QUrl url(m_dataCenter.runtimeContext().petFilterUrl());
     if (!url.isValid() || url.isEmpty()) {
-        m_statusLabel->setText(QStringLiteral("无法打开宠物筛选页面"));
+        m_statusLabel->setText(QStringLiteral("无法打开宠物管理页面"));
         return;
     }
     if (!QDesktopServices::openUrl(url)) {
-        m_statusLabel->setText(QStringLiteral("无法打开宠物筛选页面: %1").arg(url.toString()));
+        m_statusLabel->setText(QStringLiteral("无法打开宠物管理页面: %1").arg(url.toString()));
     }
 }
 
