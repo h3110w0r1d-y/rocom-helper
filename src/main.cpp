@@ -35,6 +35,7 @@ QByteArray updateCheckExpectedBytes()
 
 struct UpdateCheckResult {
     bool allowed = false;
+    bool warnOnly = false;
     QString message;
     app::RuntimeContext context;
 };
@@ -372,6 +373,13 @@ UpdateCheckResult checkUpdateGate()
         }
     }
 
+    if (error == QNetworkReply::NoError && statusCode == 400) {
+        result.allowed = true;
+        result.warnOnly = true;
+        result.message = content.isEmpty() ? QStringLiteral("更新检查未通过") : content;
+        return result;
+    }
+
     result.message = content.isEmpty() ? QStringLiteral("检查更新失败，软件退出") : content;
     return result;
 }
@@ -399,6 +407,9 @@ int main(int argc, char *argv[])
     if (!checkResult.allowed) {
         QMessageBox::critical(nullptr, QStringLiteral("error"), checkResult.message);
         return 1;
+    }
+    if (checkResult.warnOnly && !checkResult.message.isEmpty()) {
+        QMessageBox::warning(nullptr, app::appWindowTitle(), checkResult.message);
     }
 
     app::MainWindow window(checkResult.context);
