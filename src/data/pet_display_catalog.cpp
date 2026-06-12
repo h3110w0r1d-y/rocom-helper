@@ -26,7 +26,7 @@ PetDisplayCatalog PetDisplayCatalog::load(const QString &rootPath)
     catalog.m_medals = loadNameMap(prefix + QStringLiteral("MEDAL_CONF.json"));
     catalog.m_natures = loadNameMap(prefix + QStringLiteral("NATURE_CONF.json"));
     catalog.m_specialities = loadNameMap(prefix + QStringLiteral("PET_TALENT_CONF.json"));
-    catalog.m_weightRanges = loadWeightRanges(prefix + QStringLiteral("WEIGHT_CONF.json"));
+    catalog.m_weightRanges = loadPetBaseWeightRanges(prefix + QStringLiteral("PETBASE_CONF.json"));
     catalog.m_talentRanks = defaultTalentRankNames();
     return catalog;
 }
@@ -66,7 +66,7 @@ QHash<int, QString> PetDisplayCatalog::loadNameMap(const QString &resourcePath)
     return names;
 }
 
-QHash<int, WeightRange> PetDisplayCatalog::loadWeightRanges(const QString &resourcePath)
+QHash<int, WeightRange> PetDisplayCatalog::loadPetBaseWeightRanges(const QString &resourcePath)
 {
     QHash<int, WeightRange> ranges;
     QFile file(resourcePath);
@@ -81,19 +81,19 @@ QHash<int, WeightRange> PetDisplayCatalog::loadWeightRanges(const QString &resou
 
     const QJsonObject root = doc.object();
     for (auto it = root.begin(); it != root.end(); ++it) {
-        const QJsonArray bounds = it.value().toArray();
-        if (bounds.size() < 2) {
+        const QJsonObject entry = it.value().toObject();
+        const int baseConfId = entry.value(QStringLiteral("id")).toInt(it.key().toInt());
+        const int weightLow = entry.value(QStringLiteral("weight_low")).toInt();
+        const int weightHigh = entry.value(QStringLiteral("weight_high")).toInt();
+        if (baseConfId <= 0 || weightLow <= 0 || weightHigh <= weightLow) {
             continue;
         }
 
-        const int baseConfId = it.key().toInt();
-        if (baseConfId <= 0) {
-            continue;
-        }
-
-        const double lower = bounds.at(0).toDouble();
-        const double upper = bounds.at(1).toDouble();
-        ranges.insert(baseConfId, {lower, upper});
+        const double span = static_cast<double>(weightHigh - weightLow);
+        ranges.insert(baseConfId, {
+            weightLow + span * 0.02,
+            weightHigh - span * 0.02,
+        });
     }
     return ranges;
 }

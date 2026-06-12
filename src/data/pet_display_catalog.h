@@ -6,8 +6,8 @@
 namespace app {
 
 struct WeightRange {
-    double lower = 0;
-    double upper = 0;
+    double lower = 0; // weight_low + 2% 区间上界（≤ 为小不点）
+    double upper = 0; // weight_high - 2% 区间下界（≥ 为大块头）
 };
 
 class PetDisplayCatalog {
@@ -23,7 +23,7 @@ public:
 
 private:
     static QHash<int, QString> loadNameMap(const QString &resourcePath);
-    static QHash<int, WeightRange> loadWeightRanges(const QString &resourcePath);
+    static QHash<int, WeightRange> loadPetBaseWeightRanges(const QString &resourcePath);
     static QHash<int, QString> defaultTalentRankNames();
 
     QHash<int, QString> m_medals;
