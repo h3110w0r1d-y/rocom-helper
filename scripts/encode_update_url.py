@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # 要混淆的 URL。
-URL = "https://h3110w0r1d.com/roco-helper/v1.5.php"
+URL = "https://h3110w0r1d.com/roco-helper/v1.6.php"
 
 # C++ 运行时会用同一个 key 异或还原。
 XOR_KEY = 0x5A
