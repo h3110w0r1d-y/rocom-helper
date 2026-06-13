@@ -9,3 +9,4 @@
 .codegraph
 __pycache__
 /*.svg
+/build

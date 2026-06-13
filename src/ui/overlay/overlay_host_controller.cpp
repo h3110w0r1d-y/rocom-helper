@@ -39,11 +39,20 @@ public:
             return false;
         }
 
+        const WId windowId = m_host->winId();
+        if (windowId == 0 || msg->hwnd != reinterpret_cast<HWND>(windowId)) {
+            return false;
+        }
+
         const LONG x = GET_X_LPARAM(msg->lParam);
         const LONG y = GET_Y_LPARAM(msg->lParam);
         const QPoint local = m_host->mapFromGlobal(QPoint(x, y));
         const int width = m_host->width();
         const int height = m_host->height();
+
+        if (local.x() < 0 || local.y() < 0 || local.x() > width || local.y() > height) {
+            return false;
+        }
 
         const bool left = local.x() < kResizeBorder;
         const bool right = local.x() >= width - kResizeBorder;

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <QPointer>
+#include <QPoint>
+#include <QString>
 #include <QWidget>
 
 class QPushButton;

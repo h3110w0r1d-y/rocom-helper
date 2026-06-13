@@ -5,12 +5,12 @@
 #include <QPoint>
 #include <QSize>
 #include <QString>
+#include <QWidget>
 
 #include <functional>
 
 class QAbstractNativeEventFilter;
 class QEvent;
-class QWidget;
 
 namespace app {
 
