@@ -1,5 +1,6 @@
 #include "map_window.h"
 
+#include "ui/overlay/overlay_host_controller.h"
 #include "ui/window_flags.h"
 
 #include <QApplication>
@@ -27,8 +28,18 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
     , m_viewer(new MapViewer(dataCenter != nullptr ? &dataCenter->catalog() : nullptr, this))
 {
     setWindowTitle(m_baseTitle);
-    setCloseOnlyWindowControls(this);
     resize(1000, 720);
+
+#ifdef Q_OS_WIN
+    OverlayHostOptions overlayOptions;
+    overlayOptions.title = m_baseTitle;
+    overlayOptions.canEnterOverlay = [this] {
+        return m_miniMapMode;
+    };
+    m_overlayHost = new OverlayHostController(this, overlayOptions, this);
+#else
+    setCloseOnlyWindowControls(this);
+#endif
 
     connect(m_viewer, &MapViewer::mapClicked, this, &MapWindow::createMarkerAt);
     connect(m_viewer, &MapViewer::blankMapClicked, this, &MapWindow::printCoordinate);
@@ -104,6 +115,10 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+#ifdef Q_OS_WIN
+    m_overlayHost->install();
+    layout->addWidget(m_overlayHost->captionBar());
+#endif
     layout->addWidget(m_topBar);
     layout->addWidget(m_viewer, 1);
 
@@ -150,18 +165,45 @@ void MapWindow::applyState(const MapState &state)
 
 void MapWindow::setAlwaysOnTop(bool enabled)
 {
+#ifdef Q_OS_WIN
+    if (m_overlayHost != nullptr) {
+        m_overlayHost->setStaysOnTop(enabled);
+        show();
+        return;
+    }
+#endif
     setCloseOnlyWindowControls(this, enabled);
     show();
 }
 
 void MapWindow::setMiniMapMode(bool enabled)
 {
+#ifdef Q_OS_WIN
+    if (!enabled && m_overlayHost != nullptr && m_overlayHost->isOverlayEnabled()) {
+        m_overlayHost->setOverlayEnabled(false);
+    }
+    if (!enabled && m_miniMapMode) {
+        m_savedMiniMapGeometry = geometry();
+    }
+#endif
+
+    m_miniMapMode = enabled;
     m_topBar->setVisible(!enabled);
     m_viewer->setEditEnabled(!enabled);
     if (enabled) {
         m_markModeCheckbox->setChecked(false);
-        resize(420, 320);
+        if (m_savedMiniMapGeometry.isValid()) {
+            setGeometry(m_savedMiniMapGeometry);
+        } else {
+            resize(420, 320);
+        }
     }
+
+#ifdef Q_OS_WIN
+    if (m_overlayHost != nullptr) {
+        m_overlayHost->refreshOverlayButton();
+    }
+#endif
 }
 
 void MapWindow::setTrailRecordingEnabled(bool enabled)
@@ -216,6 +258,14 @@ void MapWindow::hideEvent(QHideEvent *event)
 
 void MapWindow::closeEvent(QCloseEvent *event)
 {
+#ifdef Q_OS_WIN
+    if (m_overlayHost != nullptr && m_overlayHost->isOverlayEnabled()) {
+        m_overlayHost->setOverlayEnabled(false);
+    }
+    if (m_miniMapMode) {
+        m_savedMiniMapGeometry = geometry();
+    }
+#endif
     if (m_dataCenter != nullptr) {
         m_dataCenter->saveIfDirty();
     }
@@ -334,19 +384,25 @@ void MapWindow::onPlayerChanged(const PlayerState &player)
 
 void MapWindow::updateWindowTitle(const PlayerState &player)
 {
-    if (!player.visible) {
-        setWindowTitle(m_baseTitle);
-        return;
+    QString title = m_baseTitle;
+    if (player.visible) {
+        const QString area = player.hasLocation && !player.location.areaName.isEmpty()
+            ? QStringLiteral(" %1").arg(player.location.areaName)
+            : QString();
+        title = QStringLiteral("%1 (%2, %3, %4)%5")
+                    .arg(m_baseTitle)
+                    .arg(player.gameX)
+                    .arg(player.gameY)
+                    .arg(player.gameZ)
+                    .arg(area);
     }
-    const QString area = player.hasLocation && !player.location.areaName.isEmpty()
-        ? QStringLiteral(" %1").arg(player.location.areaName)
-        : QString();
-    setWindowTitle(QStringLiteral("%1 (%2, %3, %4)%5")
-                       .arg(m_baseTitle)
-                       .arg(player.gameX)
-                       .arg(player.gameY)
-                       .arg(player.gameZ)
-                       .arg(area));
+
+    setWindowTitle(title);
+#ifdef Q_OS_WIN
+    if (m_overlayHost != nullptr) {
+        m_overlayHost->setTitle(title);
+    }
+#endif
 }
 
 void MapWindow::onMarkerChanged(const MapMarker &marker)

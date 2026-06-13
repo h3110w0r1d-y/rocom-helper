@@ -6,10 +6,13 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QPushButton>
+#include <QRect>
 #include <QShortcut>
 #include <QWidget>
 
 namespace app {
+
+class OverlayHostController;
 
 class MapWindow : public QWidget {
     Q_OBJECT
@@ -85,6 +88,9 @@ private:
     QSet<QString> m_selectedMarkerIds;
     bool m_syncingMarkerSelection = false;
     QString m_baseTitle = QStringLiteral("小地图");
+    OverlayHostController *m_overlayHost = nullptr;
+    QRect m_savedMiniMapGeometry;
+    bool m_miniMapMode = false;
 };
 
 } // namespace app
