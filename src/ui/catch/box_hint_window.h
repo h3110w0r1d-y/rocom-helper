@@ -9,6 +9,7 @@ class QPushButton;
 namespace app {
 
 class DataCenter;
+class OverlayHostController;
 
 class BoxHintWindow : public QWidget {
     Q_OBJECT
@@ -26,6 +27,9 @@ protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+#ifdef Q_OS_WIN
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+#endif
 
 private:
     void clearHint();
@@ -35,6 +39,7 @@ private:
     QLabel *m_attrLabel = nullptr;
     QLabel *m_countLabel = nullptr;
     QPushButton *m_resetCountButton = nullptr;
+    OverlayHostController *m_overlayHost = nullptr;
     int m_boxBreakCount = 0;
 };
 

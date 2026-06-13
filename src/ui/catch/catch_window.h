@@ -8,6 +8,8 @@
 
 namespace app {
 
+class OverlayHostController;
+
 class CatchWindow : public QWidget {
     Q_OBJECT
 
@@ -24,6 +26,9 @@ protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+#ifdef Q_OS_WIN
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+#endif
 
 private:
     void renderTable();
@@ -32,6 +37,7 @@ private:
     CatchState m_state;
     PetDisplayCatalog m_displayCatalog;
     QTableWidget *m_table = nullptr;
+    OverlayHostController *m_overlayHost = nullptr;
 };
 
 } // namespace app

@@ -33,6 +33,7 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
 #ifdef Q_OS_WIN
     OverlayHostOptions overlayOptions;
     overlayOptions.title = m_baseTitle;
+    overlayOptions.requireStaysOnTopForOverlay = true;
     overlayOptions.canEnterOverlay = [this] {
         return m_miniMapMode;
     };

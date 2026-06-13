@@ -20,6 +20,7 @@ public:
     void setTitle(const QString &title);
     void setOverlayButtonEnabled(bool enabled);
     void setOverlayActive(bool active);
+    void setOverlayButtonToolTip(const QString &toolTip);
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;

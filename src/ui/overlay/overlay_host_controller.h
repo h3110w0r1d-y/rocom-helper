@@ -19,7 +19,8 @@ class OverlayControlHandle;
 struct OverlayHostOptions {
     QString title;
     bool staysOnTop = false;
-    QPoint handleAnchorOffset{-28, -6};
+    bool requireStaysOnTopForOverlay = false;
+    QPoint handleAnchorOffset{0, -24};
     QSize handleSize{52, 24};
     std::function<bool()> canEnterOverlay;
     std::function<void(bool overlayEnabled)> onOverlayChanged;

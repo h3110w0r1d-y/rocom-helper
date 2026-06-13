@@ -68,6 +68,13 @@ void OverlayCaptionBar::setOverlayActive(bool active)
     }
 }
 
+void OverlayCaptionBar::setOverlayButtonToolTip(const QString &toolTip)
+{
+    if (m_overlayButton != nullptr) {
+        m_overlayButton->setToolTip(toolTip);
+    }
+}
+
 void OverlayCaptionBar::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton || !isDragArea(event->position().toPoint()) || m_hostWindow == nullptr) {

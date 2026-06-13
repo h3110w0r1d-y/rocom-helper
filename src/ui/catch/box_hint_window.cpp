@@ -1,6 +1,7 @@
 #include "box_hint_window.h"
 
 #include "data/data_center.h"
+#include "ui/overlay/overlay_host_controller.h"
 #include "ui/window_flags.h"
 
 #include <QCloseEvent>
@@ -22,7 +23,16 @@ BoxHintWindow::BoxHintWindow(DataCenter *dataCenter, QWidget *parent)
     , m_resetCountButton(new QPushButton(QStringLiteral("重置统计"), this))
 {
     setWindowTitle(QStringLiteral("盒子提示"));
+
+#ifdef Q_OS_WIN
+    OverlayHostOptions overlayOptions;
+    overlayOptions.title = QStringLiteral("盒子提示");
+    overlayOptions.staysOnTop = true;
+    overlayOptions.requireStaysOnTopForOverlay = true;
+    m_overlayHost = new OverlayHostController(this, overlayOptions, this);
+#else
     setCloseOnlyWindowControls(this, true);
+#endif
 
     QFont kindFont = m_kindLabel->font();
     kindFont.setPointSize(kindFont.pointSize() + 12);
@@ -41,13 +51,23 @@ BoxHintWindow::BoxHintWindow(DataCenter *dataCenter, QWidget *parent)
     countRow->addWidget(m_resetCountButton);
     countRow->addStretch();
 
+    auto *body = new QWidget(this);
+    auto *bodyLayout = new QVBoxLayout(body);
+    bodyLayout->setSizeConstraint(QLayout::SetFixedSize);
+    bodyLayout->setContentsMargins(18, 14, 18, 14);
+    bodyLayout->setSpacing(6);
+    bodyLayout->addWidget(m_kindLabel);
+    bodyLayout->addWidget(m_attrLabel);
+    bodyLayout->addLayout(countRow);
+
     auto *layout = new QVBoxLayout(this);
-    layout->setSizeConstraint(QLayout::SetFixedSize);
-    layout->setContentsMargins(18, 14, 18, 14);
-    layout->setSpacing(6);
-    layout->addWidget(m_kindLabel);
-    layout->addWidget(m_attrLabel);
-    layout->addLayout(countRow);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+#ifdef Q_OS_WIN
+    m_overlayHost->install();
+    layout->addWidget(m_overlayHost->captionBar());
+#endif
+    layout->addWidget(body, 0, Qt::AlignTop);
 
     if (dataCenter != nullptr) {
         connect(dataCenter, &DataCenter::boxHintUpdated, this, &BoxHintWindow::updateHint);
@@ -70,9 +90,24 @@ void BoxHintWindow::hideEvent(QHideEvent *event)
 
 void BoxHintWindow::closeEvent(QCloseEvent *event)
 {
+#ifdef Q_OS_WIN
+    if (m_overlayHost != nullptr && m_overlayHost->isOverlayEnabled()) {
+        m_overlayHost->setOverlayEnabled(false);
+    }
+#endif
     event->ignore();
     hide();
 }
+
+#ifdef Q_OS_WIN
+bool BoxHintWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+    if (m_overlayHost != nullptr && m_overlayHost->handleNativeEvent(eventType, message, result)) {
+        return true;
+    }
+    return QWidget::nativeEvent(eventType, message, result);
+}
+#endif
 
 void BoxHintWindow::updateHint(const QJsonObject &payload)
 {

@@ -118,6 +118,10 @@ void OverlayHostController::setStaysOnTop(bool enabled)
         return;
     }
 
+    if (!enabled && m_overlayEnabled) {
+        setOverlayEnabled(false);
+    }
+
     m_staysOnTop = enabled;
     m_options.staysOnTop = enabled;
 
@@ -135,6 +139,8 @@ void OverlayHostController::setStaysOnTop(bool enabled)
         m_host->show();
         refreshWindowChrome();
     }
+
+    refreshOverlayButton();
 #else
     Q_UNUSED(enabled);
 #endif
@@ -163,6 +169,16 @@ void OverlayHostController::refreshOverlayButton()
     const bool canEnter = canEnterOverlayNow();
     m_captionBar->setOverlayButtonEnabled(canEnter || m_overlayEnabled);
     m_captionBar->setOverlayActive(m_overlayEnabled);
+
+    QString toolTip = QStringLiteral("进入悬浮穿透模式");
+    if (!canEnter && !m_overlayEnabled) {
+        if (m_options.canEnterOverlay && !m_options.canEnterOverlay()) {
+            toolTip = QStringLiteral("需先开启小地图模式");
+        } else if (m_options.requireStaysOnTopForOverlay && !m_staysOnTop) {
+            toolTip = QStringLiteral("需先开启置顶");
+        }
+    }
+    m_captionBar->setOverlayButtonToolTip(toolTip);
 #endif
 }
 
@@ -352,6 +368,9 @@ void OverlayHostController::leaveOverlay()
 
 bool OverlayHostController::canEnterOverlayNow() const
 {
+    if (m_options.requireStaysOnTopForOverlay && !m_staysOnTop) {
+        return false;
+    }
     if (m_options.canEnterOverlay) {
         return m_options.canEnterOverlay();
     }

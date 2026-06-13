@@ -1,5 +1,6 @@
 #include "catch_window.h"
 
+#include "ui/overlay/overlay_host_controller.h"
 #include "ui/window_flags.h"
 
 #include <QAbstractItemView>
@@ -19,8 +20,17 @@ CatchWindow::CatchWindow(DataCenter *dataCenter, QWidget *parent)
     , m_table(new QTableWidget(0, 8, this))
 {
     setWindowTitle(QStringLiteral("捕捉日志"));
-    setCloseOnlyWindowControls(this, true);
     resize(640, 420);
+
+#ifdef Q_OS_WIN
+    OverlayHostOptions overlayOptions;
+    overlayOptions.title = QStringLiteral("捕捉日志");
+    overlayOptions.staysOnTop = true;
+    overlayOptions.requireStaysOnTopForOverlay = true;
+    m_overlayHost = new OverlayHostController(this, overlayOptions, this);
+#else
+    setCloseOnlyWindowControls(this, true);
+#endif
 
     m_table->setHorizontalHeaderLabels({
         QStringLiteral("名称"),
@@ -41,6 +51,12 @@ CatchWindow::CatchWindow(DataCenter *dataCenter, QWidget *parent)
     }
 
     auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+#ifdef Q_OS_WIN
+    m_overlayHost->install();
+    layout->addWidget(m_overlayHost->captionBar());
+#endif
     layout->addWidget(m_table, 1);
 
     if (m_dataCenter != nullptr) {
@@ -68,9 +84,24 @@ void CatchWindow::hideEvent(QHideEvent *event)
 
 void CatchWindow::closeEvent(QCloseEvent *event)
 {
+#ifdef Q_OS_WIN
+    if (m_overlayHost != nullptr && m_overlayHost->isOverlayEnabled()) {
+        m_overlayHost->setOverlayEnabled(false);
+    }
+#endif
     event->ignore();
     hide();
 }
+
+#ifdef Q_OS_WIN
+bool CatchWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+    if (m_overlayHost != nullptr && m_overlayHost->handleNativeEvent(eventType, message, result)) {
+        return true;
+    }
+    return QWidget::nativeEvent(eventType, message, result);
+}
+#endif
 
 void CatchWindow::renderTable()
 {
