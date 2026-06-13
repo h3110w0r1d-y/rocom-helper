@@ -16,6 +16,8 @@ OverlayCaptionBar::OverlayCaptionBar(OverlayHostController *controller, QWidget 
 {
     setFixedHeight(32);
     setAutoFillBackground(true);
+    setStyleSheet(QStringLiteral("background-color: palette(window); "
+                                 "QPushButton { padding: 0 6px; min-height: 20px; }"));
 
     auto *titleLabel = new QLabel(this);
     titleLabel->setObjectName(QStringLiteral("overlayCaptionTitle"));

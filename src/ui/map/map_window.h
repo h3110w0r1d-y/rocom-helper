@@ -41,6 +41,9 @@ protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+#ifdef Q_OS_WIN
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+#endif
 
 private:
     void populateMapCombo();
@@ -82,6 +85,9 @@ private:
     QWidget *m_editBar = nullptr;
     QWidget *m_topBar = nullptr;
     QList<QShortcut *> m_deleteShortcuts;
+#ifdef Q_OS_WIN
+    QWidget *m_sizeGripBar = nullptr;
+#endif
     bool m_followPlayer = true;
     QString m_currentMapId;
     QString m_currentLayerId;

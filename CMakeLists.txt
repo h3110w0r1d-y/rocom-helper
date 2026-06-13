@@ -95,7 +95,7 @@ target_link_libraries(roco_helper PRIVATE
 
 if(WIN32)
     # 使用 GetAdaptersAddresses() 将 Npcap 设备 GUID 映射为可读名称。
-    target_link_libraries(roco_helper PRIVATE iphlpapi)
+    target_link_libraries(roco_helper PRIVATE iphlpapi dwmapi)
 elseif(APPLE)
     # 使用 SystemConfiguration 将 en0 这类 BSD 设备名映射为可读服务名。
     target_link_libraries(roco_helper PRIVATE

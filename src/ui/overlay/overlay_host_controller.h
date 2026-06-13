@@ -9,7 +9,6 @@
 
 #include <functional>
 
-class QAbstractNativeEventFilter;
 class QEvent;
 
 namespace app {
@@ -42,6 +41,8 @@ public:
     void setTitle(const QString &title);
     void refreshOverlayButton();
     void syncHandleGeometry();
+    void refreshWindowChrome();
+    bool handleNativeEvent(const QByteArray &eventType, void *message, qintptr *result);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -72,7 +73,6 @@ private:
     bool m_installed = false;
 #ifdef Q_OS_WIN
     bool m_resizeBorderEnabled = true;
-    QAbstractNativeEventFilter *m_resizeFilter = nullptr;
 #endif
 };
 

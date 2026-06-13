@@ -19,6 +19,9 @@
 #include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
+#ifdef Q_OS_WIN
+#include <QSizeGrip>
+#endif
 
 namespace app {
 
@@ -121,6 +124,19 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
 #endif
     layout->addWidget(m_topBar);
     layout->addWidget(m_viewer, 1);
+#ifdef Q_OS_WIN
+    m_sizeGripBar = new QWidget(this);
+    auto *sizeGripLayout = new QHBoxLayout(m_sizeGripBar);
+    sizeGripLayout->setContentsMargins(0, 0, 2, 2);
+    sizeGripLayout->addStretch(1);
+    sizeGripLayout->addWidget(new QSizeGrip(m_sizeGripBar), 0, Qt::AlignBottom | Qt::AlignRight);
+    layout->addWidget(m_sizeGripBar);
+    connect(m_overlayHost, &OverlayHostController::overlayEnabledChanged, this, [this](bool enabled) {
+        if (m_sizeGripBar != nullptr) {
+            m_sizeGripBar->setVisible(!enabled);
+        }
+    });
+#endif
 
     if (m_dataCenter != nullptr) {
         connect(m_dataCenter, &DataCenter::stateLoaded, this, &MapWindow::applyState);
@@ -255,6 +271,16 @@ void MapWindow::hideEvent(QHideEvent *event)
     QWidget::hideEvent(event);
     emit opcodeConsumerVisibilityChanged();
 }
+
+#ifdef Q_OS_WIN
+bool MapWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+    if (m_overlayHost != nullptr && m_overlayHost->handleNativeEvent(eventType, message, result)) {
+        return true;
+    }
+    return QWidget::nativeEvent(eventType, message, result);
+}
+#endif
 
 void MapWindow::closeEvent(QCloseEvent *event)
 {

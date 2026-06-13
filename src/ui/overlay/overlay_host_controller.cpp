@@ -2,106 +2,17 @@
 
 #include "overlay_caption_bar.h"
 #include "overlay_control_handle.h"
+#include "win_frameless_decorations.h"
 #include "win_mouse_passthrough.h"
 
-#include <QAbstractNativeEventFilter>
-#include <QCoreApplication>
 #include <QEvent>
 #include <QWidget>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
-#include <windowsx.h>
 #endif
 
 namespace app {
-namespace {
-
-#ifdef Q_OS_WIN
-constexpr int kResizeBorder = 8;
-
-class FramelessResizeFilter final : public QAbstractNativeEventFilter {
-public:
-    FramelessResizeFilter(QWidget *host, bool *enabledFlag)
-        : m_host(host)
-        , m_enabledFlag(enabledFlag)
-    {
-    }
-
-    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override
-    {
-        if (m_enabledFlag == nullptr || !*m_enabledFlag || m_host == nullptr || eventType != "windows_generic_MSG") {
-            return false;
-        }
-
-        auto *msg = static_cast<MSG *>(message);
-        if (msg->message != WM_NCHITTEST) {
-            return false;
-        }
-
-        const WId windowId = m_host->winId();
-        if (windowId == 0 || msg->hwnd != reinterpret_cast<HWND>(windowId)) {
-            return false;
-        }
-
-        const LONG x = GET_X_LPARAM(msg->lParam);
-        const LONG y = GET_Y_LPARAM(msg->lParam);
-        const QPoint local = m_host->mapFromGlobal(QPoint(x, y));
-        const int width = m_host->width();
-        const int height = m_host->height();
-
-        if (local.x() < 0 || local.y() < 0 || local.x() > width || local.y() > height) {
-            return false;
-        }
-
-        const bool left = local.x() < kResizeBorder;
-        const bool right = local.x() >= width - kResizeBorder;
-        const bool top = local.y() < kResizeBorder;
-        const bool bottom = local.y() >= height - kResizeBorder;
-
-        if (top && left) {
-            *result = HTTOPLEFT;
-            return true;
-        }
-        if (top && right) {
-            *result = HTTOPRIGHT;
-            return true;
-        }
-        if (bottom && left) {
-            *result = HTBOTTOMLEFT;
-            return true;
-        }
-        if (bottom && right) {
-            *result = HTBOTTOMRIGHT;
-            return true;
-        }
-        if (left) {
-            *result = HTLEFT;
-            return true;
-        }
-        if (right) {
-            *result = HTRIGHT;
-            return true;
-        }
-        if (top) {
-            *result = HTTOP;
-            return true;
-        }
-        if (bottom) {
-            *result = HTBOTTOM;
-            return true;
-        }
-
-        return false;
-    }
-
-private:
-    QPointer<QWidget> m_host;
-    bool *m_enabledFlag = nullptr;
-};
-#endif
-
-} // namespace
 
 OverlayHostController::OverlayHostController(QWidget *host, OverlayHostOptions options, QObject *parent)
     : QObject(parent)
@@ -121,11 +32,6 @@ OverlayHostController::~OverlayHostController()
         m_handle->close();
         m_handle = nullptr;
     }
-    if (m_resizeFilter != nullptr) {
-        qApp->removeNativeEventFilter(m_resizeFilter);
-        delete m_resizeFilter;
-        m_resizeFilter = nullptr;
-    }
 #endif
 }
 
@@ -140,12 +46,10 @@ void OverlayHostController::install()
     m_captionBar->setTitle(m_options.title.isEmpty() ? m_host->windowTitle() : m_options.title);
     refreshOverlayButton();
 
-    m_resizeFilter = new FramelessResizeFilter(m_host, &m_resizeBorderEnabled);
-    qApp->installNativeEventFilter(m_resizeFilter);
-
     applyDecoratedWindowFlags();
     m_host->installEventFilter(this);
     m_host->show();
+    refreshWindowChrome();
 
     m_installed = true;
 #endif
@@ -229,6 +133,7 @@ void OverlayHostController::setStaysOnTop(bool enabled)
     } else {
         applyDecoratedWindowFlags();
         m_host->show();
+        refreshWindowChrome();
     }
 #else
     Q_UNUSED(enabled);
@@ -275,6 +180,50 @@ void OverlayHostController::syncHandleGeometry()
 #endif
 }
 
+void OverlayHostController::refreshWindowChrome()
+{
+#ifdef Q_OS_WIN
+    if (m_host != nullptr && !m_overlayEnabled) {
+        overlay::refreshWindowChrome(m_host);
+    }
+#endif
+}
+
+bool OverlayHostController::handleNativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+#ifdef Q_OS_WIN
+    if (!m_installed || m_overlayEnabled || !m_resizeBorderEnabled || m_host == nullptr) {
+        return false;
+    }
+    if (eventType != "windows_generic_MSG" || message == nullptr || result == nullptr) {
+        return false;
+    }
+
+    auto *msg = static_cast<MSG *>(message);
+    if (msg->message != WM_NCHITTEST) {
+        return false;
+    }
+
+    const WId windowId = m_host->winId();
+    if (windowId == 0 || msg->hwnd != reinterpret_cast<HWND>(windowId)) {
+        return false;
+    }
+
+    const LRESULT hit = overlay::hitTestResizeBorder(reinterpret_cast<HWND>(windowId), msg->lParam);
+    if (hit == HTCLIENT) {
+        return false;
+    }
+
+    *result = hit;
+    return true;
+#else
+    Q_UNUSED(eventType);
+    Q_UNUSED(message);
+    Q_UNUSED(result);
+    return false;
+#endif
+}
+
 void OverlayHostController::onHostMoveOrResize()
 {
 #ifdef Q_OS_WIN
@@ -290,7 +239,10 @@ void OverlayHostController::onHostShow()
     if (m_overlayEnabled && m_handle != nullptr) {
         syncHandleGeometry();
         m_handle->show();
+        return;
     }
+
+    refreshWindowChrome();
 #endif
 }
 
@@ -314,6 +266,7 @@ void OverlayHostController::applyDecoratedWindowFlags()
     if (m_staysOnTop) {
         flags |= Qt::WindowStaysOnTopHint;
     }
+    m_host->setAttribute(Qt::WA_TranslucentBackground, false);
     m_host->setWindowFlags(flags);
 #endif
 }
@@ -385,6 +338,7 @@ void OverlayHostController::leaveOverlay()
     }
 
     m_resizeBorderEnabled = true;
+    refreshWindowChrome();
 
     m_overlayEnabled = false;
     refreshOverlayButton();
