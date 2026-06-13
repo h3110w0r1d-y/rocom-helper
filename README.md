@@ -2,20 +2,16 @@
 
 基于流量解析实现的洛克王国世界助手，小地图、路径显示、资源自动标注、宠物筛选、S2盒子属性显示、异色提示、捕捉日志
 
-> [!NOTE]
-> 软件仅支持 Windows（x86_64）、macOS（arm64）
->
-> Android、iOS 用户可在 PC 端安装代理工具实现对移动端流量的解析
+> [!IMPORTANT]
+> PC端直接使用有封号风险，建议用手机玩游戏，用电脑运行工具，电脑开热点（理论上可完全避免被封）或用Reqable等方式让流量从电脑上走
+> 需要在点击 `进入游戏` 前打开工具
 
 > [!IMPORTANT]
 > Windows 用户须安装 [Npcap](https://npcap.com/#download)，安装时勾选 `Install Npcap in WinPcap API-compatilbility mode`
 
-> [!IMPORTANT]
-> 需要在点击 `进入游戏` 前打开工具
-
 ## 下载
 
-### [有用户反馈被封号，谨慎使用](https://bbs.nga.cn/read.php?tid=46955980)
+### [有用户反馈被封号，谨慎使用，推荐用热点或Reqable在移动端玩游戏](https://bbs.nga.cn/read.php?tid=46955980)
 
 - Windows：[roco_helper.exe](https://github.com/h3110w0r1d-y/rocom-helper/releases/latest/download/roco_helper.exe)
 - macOS：[roco_helper.app.zip](https://github.com/h3110w0r1d-y/rocom-helper/releases/latest/download/roco_helper.app.zip)
