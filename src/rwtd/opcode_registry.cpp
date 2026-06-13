@@ -21,6 +21,7 @@ const QList<OpcodeEntry> &entries()
         {ZoneOpcode::ZonePetBoxTidyRsp, OpcodeProfile::External},
         {ZoneOpcode::ZonePetBoxChangePetRsp, OpcodeProfile::External},
         {ZoneOpcode::ZoneSceneThrowCatchFinishRsp, OpcodeProfile::CatchLog | OpcodeProfile::External},
+        {ZoneOpcode::ZoneHomeQueryFriendHomeInfoRsp, OpcodeProfile::EggTime},
     };
     return table;
 }

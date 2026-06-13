@@ -71,7 +71,13 @@ public:
     bool deleteMarker(const QString &markerId);
     void clearTemporaryMarkers();
     void setMarkerVisible(const QString &markerId, bool visible);
-    PlayerState updatePlayer(bool visible, double rotation, int gameX, int gameY, int gameZ);
+    PlayerState updatePlayer(
+        bool visible,
+        double rotation,
+        double ctrlRotation,
+        int gameX,
+        int gameY,
+        int gameZ);
 
 public slots:
     void handleEvent(const app::AppEvent &event);
@@ -93,6 +99,7 @@ signals:
     void layerChanged(const QString &layerId);
     void shinyPetDetected(const QJsonObject &payload);
     void boxHintUpdated(const QJsonObject &payload);
+    void eggTimeUpdated(const QJsonObject &payload);
 
 private:
     MapState emptyMapState() const;

@@ -14,6 +14,7 @@
 #include "rwtd/opcode_registry.h"
 
 #include "battle_proto.pb.h"
+#include "com_home.pb.h"
 #include "space_action.pb.h"
 #include "zonesvr.pb.h"
 #include "xls_enum.pb.h"
@@ -406,6 +407,9 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         position.gameY = message.to_pos().has_y() ? message.to_pos().y() : 0;
         position.gameZ = message.to_pos().has_z() ? message.to_pos().z() : 0;
         position.rotation = message.has_to_rot() ? gameRotationToMapRotation(message.to_rot()) : 0.0;
+        position.ctrlRotation = message.has_ctrl_rot()
+            ? gameRotationToMapRotation(message.ctrl_rot())
+            : position.rotation;
         position.visible = true;
         emit eventCreated(makePlayerPositionChangedEvent(EventSource::Traffic, EventFlag::UpdateUi, position));
         return;
@@ -498,10 +502,6 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         emitExternalEvent(EventType::PetInfoDeleted, {{QStringLiteral("ids"), ids}});
         return;
     }
-    case rwtd::ZoneOpcode::ZoneBattleFinishNotify:
-    case rwtd::ZoneOpcode::ZoneBattleForceFinishNotify:
-        emitUiEvent(EventType::BoxHintUpdated, {{QStringLiteral("clear"), true}});
-        return;
     case rwtd::ZoneOpcode::ZoneBattlePerformStartNotify: {
         Next::ZoneBattlePerformStartNotify message;
         if (!parseMessage(payload, message) || !message.has_perform_cmd()) {
@@ -566,6 +566,44 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
                 });
             }
         }
+        return;
+    }
+    case rwtd::ZoneOpcode::ZoneBattleFinishNotify:
+    case rwtd::ZoneOpcode::ZoneBattleForceFinishNotify:
+        emitUiEvent(EventType::BoxHintUpdated, {{QStringLiteral("clear"), true}});
+        return;
+    case rwtd::ZoneOpcode::ZoneHomeQueryFriendHomeInfoRsp: {
+        if (m_opcodeFilter != nullptr
+            && !m_opcodeFilter->isUiProfileEnabled(rwtd::OpcodeProfile::EggTime)) {
+            return;
+        }
+        Next::ZoneHomeQueryFriendHomeInfoRsp message;
+        if (!parseMessage(payload, message)) {
+            return;
+        }
+
+        QJsonArray pets;
+        if (message.has_friend_cell_home_brief_info()) {
+            const Next::CellHomeBriefInfo &homeInfo = message.friend_cell_home_brief_info();
+            for (const Next::HomePetBriefInfo &pet : homeInfo.home_pets()) {
+                if (!pet.has_predicted_egg_time()) {
+                    continue;
+                }
+
+                QString name;
+                if (pet.has_display_info() && pet.display_info().has_name()) {
+                    name = QString::fromStdString(pet.display_info().name());
+                }
+
+                qint64 predictedEggTime = pet.predicted_egg_time();
+
+                pets.append(QJsonObject{
+                    {QStringLiteral("name"), name},
+                    {QStringLiteral("predicted_egg_time"), static_cast<double>(predictedEggTime)},
+                });
+            }
+        }
+        emitUiEvent(EventType::EggTimeUpdated, {{QStringLiteral("pets"), pets}});
         return;
     }
     default:

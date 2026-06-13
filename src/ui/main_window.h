@@ -10,6 +10,7 @@
 #include "traffic/traffic_event_mapper.h"
 #include "ui/catch/box_hint_window.h"
 #include "ui/catch/catch_window.h"
+#include "ui/catch/egg_time_window.h"
 #include "ui/marker_filter_panel.h"
 #include "ui/map/map_window.h"
 
@@ -45,6 +46,7 @@ private:
     void showMap();
     void showCatch();
     void showBoxHint();
+    void showEggTime();
     void openPetFilter();
     void applyHttpPort();
     void importPathOverlay();
@@ -66,6 +68,7 @@ private:
     MapWindow *m_mapWindow = nullptr;
     CatchWindow *m_catchWindow = nullptr;
     BoxHintWindow *m_boxHintWindow = nullptr;
+    EggTimeWindow *m_eggTimeWindow = nullptr;
     rwtd::OpcodeFilter m_opcodeFilter;
     rwtd::LiveCaptureService m_capture;
     EventDispatcher m_eventDispatcher;
@@ -96,6 +99,7 @@ private:
     QPushButton *m_applyHttpPortButton = nullptr;
     QPushButton *m_showBoxHintButton = nullptr;
     QPushButton *m_showCatchButton = nullptr;
+    QPushButton *m_showEggTimeButton = nullptr;
     QTimer m_saveTimer;
     QList<QMessageBox *> m_alertWindows;
 };

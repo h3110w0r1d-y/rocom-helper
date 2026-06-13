@@ -198,7 +198,7 @@ void MapViewer::setPlayerPosition(const PlayerState &player, bool follow)
 
     const QPointF playerPos(player.location.mapX, player.location.mapY);
     recordTrailPosition(playerPos);
-    logPathRotationSuggestion(playerPos, player.rotation);
+    logPathRotationSuggestion(playerPos, player.ctrlRotation);
     if (player.location.layerId != m_activeLayerId) {
         if (m_playerItem != nullptr) {
             m_playerItem->setVisible(false);

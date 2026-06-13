@@ -13,7 +13,8 @@ enum class OpcodeProfile : quint8 {
     Map      = 1 << 0,
     CatchLog = 1 << 1,
     BoxHint  = 1 << 2,
-    External = 1 << 3,
+    EggTime  = 1 << 3,
+    External = 1 << 4,
 };
 Q_DECLARE_FLAGS(OpcodeProfiles, OpcodeProfile)
 Q_DECLARE_OPERATORS_FOR_FLAGS(OpcodeProfiles)

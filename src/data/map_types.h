@@ -108,6 +108,7 @@ struct MapLocation {
 struct PlayerPositionPayload {
     bool visible = true;
     double rotation = 0.0;
+    double ctrlRotation = 0.0;
     int gameX = 0;
     int gameY = 0;
     int gameZ = 0;
@@ -116,6 +117,7 @@ struct PlayerPositionPayload {
 struct PlayerState {
     bool visible = true;
     double rotation = 0.0;
+    double ctrlRotation = 0.0;
     int gameX = 0;
     int gameY = 0;
     int gameZ = 0;

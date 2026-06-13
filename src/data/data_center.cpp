@@ -360,11 +360,18 @@ void DataCenter::setMarkerVisible(const QString &markerId, bool visible)
     emit markerVisibilityChanged(normalizedId, visible);
 }
 
-PlayerState DataCenter::updatePlayer(bool visible, double rotation, int gameX, int gameY, int gameZ)
+PlayerState DataCenter::updatePlayer(
+    bool visible,
+    double rotation,
+    double ctrlRotation,
+    int gameX,
+    int gameY,
+    int gameZ)
 {
     PlayerState player;
     player.visible = visible;
     player.rotation = rotation;
+    player.ctrlRotation = ctrlRotation;
     player.gameX = gameX;
     player.gameY = gameY;
     player.gameZ = gameZ;
@@ -400,7 +407,13 @@ void DataCenter::handleEvent(const AppEvent &event)
     case EventType::PlayerPositionChanged:
         if (event.playerPosition.has_value()) {
             const PlayerPositionPayload &position = *event.playerPosition;
-            updatePlayer(position.visible, position.rotation, position.gameX, position.gameY, position.gameZ);
+            updatePlayer(
+                position.visible,
+                position.rotation,
+                position.ctrlRotation,
+                position.gameX,
+                position.gameY,
+                position.gameZ);
         }
         break;
     case EventType::MapMarkerAdded:
@@ -421,6 +434,9 @@ void DataCenter::handleEvent(const AppEvent &event)
         break;
     case EventType::BoxHintUpdated:
         emit boxHintUpdated(event.payload);
+        break;
+    case EventType::EggTimeUpdated:
+        emit eggTimeUpdated(event.payload);
         break;
     default:
         break;

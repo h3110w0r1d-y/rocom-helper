@@ -24,6 +24,7 @@ enum class EventType {
     CatchRecordAdded,
     ShinyPetDetected,
     BoxHintUpdated,
+    EggTimeUpdated,
     PetInfoReload,
     PetInfoChanged,
     PetInfoDeleted,
@@ -81,6 +82,8 @@ inline QString eventTypeName(EventType type)
         return QStringLiteral("catch.shiny_pet_detected");
     case EventType::BoxHintUpdated:
         return QStringLiteral("box.hint_updated");
+    case EventType::EggTimeUpdated:
+        return QStringLiteral("egg_time.updated");
     case EventType::PetInfoReload:
         return QStringLiteral("pet_info.reload");
     case EventType::PetInfoChanged:
@@ -110,17 +113,6 @@ inline QString eventSourceName(EventSource source)
         break;
     }
     return QStringLiteral("unknown");
-}
-
-inline QJsonObject playerPositionToJson(const PlayerPositionPayload &position)
-{
-    return {
-        {QStringLiteral("visible"), position.visible},
-        {QStringLiteral("rotation"), position.rotation},
-        {QStringLiteral("game_x"), position.gameX},
-        {QStringLiteral("game_y"), position.gameY},
-        {QStringLiteral("game_z"), position.gameZ},
-    };
 }
 
 inline AppEvent makePlayerPositionChangedEvent(
@@ -171,9 +163,7 @@ inline AppEvent makeCatchRecordAddedEvent(
 inline QJsonObject appEventToJson(const AppEvent &event)
 {
     QJsonObject payload = event.payload;
-    if (event.type == EventType::PlayerPositionChanged && event.playerPosition.has_value()) {
-        payload = playerPositionToJson(*event.playerPosition);
-    } else if (event.type == EventType::CatchRecordAdded && event.catchRecord.has_value()) {
+    if (event.type == EventType::CatchRecordAdded && event.catchRecord.has_value()) {
         payload = catchRecordToJson(*event.catchRecord);
     }
 

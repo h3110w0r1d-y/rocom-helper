@@ -55,6 +55,7 @@ MainWindow::MainWindow(const RuntimeContext &runtimeContext, QWidget *parent)
     , m_mapWindow(new MapWindow(&m_dataCenter))
     , m_catchWindow(new CatchWindow(&m_dataCenter))
     , m_boxHintWindow(new BoxHintWindow(&m_dataCenter))
+    , m_eggTimeWindow(new EggTimeWindow())
 {
     m_dataCenter.setRuntimeContext(runtimeContext);
 
@@ -87,6 +88,7 @@ MainWindow::~MainWindow()
     delete m_mapWindow;
     delete m_catchWindow;
     delete m_boxHintWindow;
+    delete m_eggTimeWindow;
 }
 
 void MainWindow::buildUi()
@@ -160,12 +162,14 @@ void MainWindow::buildUi()
     m_applyHttpPortButton = new QPushButton(QStringLiteral("应用端口"), this);
     m_showBoxHintButton = new QPushButton(QStringLiteral("盒子提示"), this);
     m_showCatchButton = new QPushButton(QStringLiteral("捕捉日志"), this);
+    m_showEggTimeButton = new QPushButton(QStringLiteral("产蛋时间"), this);
     s2Layout->addWidget(new QLabel(QStringLiteral("宠物管理端口"), this), 0, 0);
     s2Layout->addWidget(m_httpPortSpin, 0, 1);
     s2Layout->addWidget(m_applyHttpPortButton, 0, 2);
     s2Layout->addWidget(m_petFilterButton, 1, 0);
     s2Layout->addWidget(m_showBoxHintButton, 1, 1);
     s2Layout->addWidget(m_showCatchButton, 1, 2);
+    s2Layout->addWidget(m_showEggTimeButton, 2, 0);
 
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(trafficGroup);
@@ -186,6 +190,7 @@ void MainWindow::connectSignals()
     connect(m_applyHttpPortButton, &QPushButton::clicked, this, &MainWindow::applyHttpPort);
     connect(m_showBoxHintButton, &QPushButton::clicked, this, &MainWindow::showBoxHint);
     connect(m_showCatchButton, &QPushButton::clicked, this, &MainWindow::showCatch);
+    connect(m_showEggTimeButton, &QPushButton::clicked, this, &MainWindow::showEggTime);
     connect(m_topCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setAlwaysOnTop);
     connect(m_miniMapCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setMiniMapMode);
     connect(m_mapWindow->miniMapCheckbox(), &QCheckBox::toggled, m_miniMapCheckbox, &QCheckBox::setChecked);
@@ -219,6 +224,8 @@ void MainWindow::connectSignals()
     connect(m_mapWindow, &MapWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
     connect(m_catchWindow, &CatchWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
     connect(m_boxHintWindow, &BoxHintWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
+    connect(m_eggTimeWindow, &EggTimeWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
+    connect(&m_dataCenter, &DataCenter::eggTimeUpdated, m_eggTimeWindow, &EggTimeWindow::applyPayload);
 
     connect(&m_capture, &rwtd::LiveCaptureService::statusChanged, this, [this](const QString &message) {
         m_statusLabel->setText(message);
@@ -344,11 +351,19 @@ void MainWindow::showBoxHint()
     m_boxHintWindow->activateWindow();
 }
 
+void MainWindow::showEggTime()
+{
+    m_eggTimeWindow->show();
+    m_eggTimeWindow->raise();
+    m_eggTimeWindow->activateWindow();
+}
+
 void MainWindow::syncOpcodeProfiles()
 {
     m_opcodeFilter.setUiProfileEnabled(rwtd::OpcodeProfile::Map, m_mapWindow->isVisible());
     m_opcodeFilter.setUiProfileEnabled(rwtd::OpcodeProfile::CatchLog, m_catchWindow->isVisible());
     m_opcodeFilter.setUiProfileEnabled(rwtd::OpcodeProfile::BoxHint, m_boxHintWindow->isVisible());
+    m_opcodeFilter.setUiProfileEnabled(rwtd::OpcodeProfile::EggTime, m_eggTimeWindow->isVisible());
 }
 
 void MainWindow::openPetFilter()
@@ -574,6 +589,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     m_mapWindow->hide();
     m_catchWindow->hide();
     m_boxHintWindow->hide();
+    m_eggTimeWindow->hide();
     event->accept();
 }
 
