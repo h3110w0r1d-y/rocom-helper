@@ -48,8 +48,6 @@ void OverlayHostController::install()
 
     applyDecoratedWindowFlags();
     m_host->installEventFilter(this);
-    m_host->show();
-    refreshWindowChrome();
 
     m_installed = true;
 #endif

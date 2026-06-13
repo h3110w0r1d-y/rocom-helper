@@ -573,6 +573,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     m_dataCenter.close();
     m_mapWindow->hide();
     m_catchWindow->hide();
+    m_boxHintWindow->hide();
     event->accept();
 }
 
