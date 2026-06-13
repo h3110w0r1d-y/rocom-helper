@@ -2,13 +2,16 @@
 #include "ui/main_window.h"
 
 #include <QApplication>
+#include <QDir>
 #include <QEventLoop>
 #include <QImageReader>
 #include <QLabel>
+#include <QLockFile>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QStandardPaths>
 #include <QTimer>
 
 #include <algorithm>
@@ -376,6 +379,22 @@ UpdateCheckResult checkUpdateGate()
     return result;
 }
 
+class SingleInstanceGuard {
+public:
+    explicit SingleInstanceGuard(const QString &lockFileName)
+        : m_lockFile(QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).filePath(lockFileName))
+    {
+    }
+
+    bool acquire()
+    {
+        return m_lockFile.tryLock();
+    }
+
+private:
+    QLockFile m_lockFile;
+};
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -386,6 +405,14 @@ int main(int argc, char *argv[])
     app.setWindowIcon(QIcon(QStringLiteral(":/app.png")));
     QCoreApplication::setApplicationName(QStringLiteral("roco_helper"));
     QCoreApplication::setApplicationVersion(app::appVersionString());
+
+    SingleInstanceGuard instanceGuard(QStringLiteral("roco_helper.lock"));
+    if (!instanceGuard.acquire()) {
+        QMessageBox::warning(nullptr,
+                             app::appWindowTitle(),
+                             QStringLiteral("程序已在运行，请勿重复启动。"));
+        return 0;
+    }
 
     QLabel checkingLabel(QStringLiteral("正在检查更新"));
     checkingLabel.setAlignment(Qt::AlignCenter);
