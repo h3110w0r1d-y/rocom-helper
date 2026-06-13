@@ -24,8 +24,11 @@ class HttpServerService : public QObject {
 public:
     explicit HttpServerService(DatabaseService *database, DataCenter *dataCenter, QObject *parent = nullptr);
 
-    bool start(quint16 port = 4939);
+    bool start(quint16 port);
+    bool restart(quint16 port);
     void stop();
+    bool isListening() const;
+    quint16 currentPort() const;
 
 public slots:
     void rememberLastSsePayload(const QByteArray &payload);
@@ -46,6 +49,7 @@ private:
     DataCenter *m_dataCenter = nullptr;
     QHttpServer m_server;
     QTcpServer m_tcpServer;
+    quint16 m_port = 0;
     QByteArray m_lastSsePayload;
     std::vector<std::unique_ptr<QHttpServerResponder>> m_sseClients;
 };

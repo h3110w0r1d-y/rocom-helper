@@ -33,6 +33,8 @@ public:
     CatchState catchSnapshot() const;
     const RuntimeContext &runtimeContext() const;
 
+    void setHttpPort(int port);
+
     QList<QPair<QString, QString>> mapOptions() const;
     QVector<MapLayerConfig> layersForMap(const QString &mapId = {}) const;
 

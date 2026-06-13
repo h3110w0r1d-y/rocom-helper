@@ -67,9 +67,6 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
     m_centerButton = new QPushButton(QStringLiteral("居中"), this);
     connect(m_centerButton, &QPushButton::clicked, this, &MapWindow::centerPlayer);
 
-    m_exportButton = new QPushButton(QStringLiteral("导出图片"), this);
-    connect(m_exportButton, &QPushButton::clicked, this, &MapWindow::exportCurrentMapImage);
-
     m_deleteButton = new QPushButton(QStringLiteral("删除选中"), this);
     m_deleteButton->setEnabled(false);
     connect(m_deleteButton, &QPushButton::clicked, this, &MapWindow::deleteSelectedMarkers);
@@ -103,7 +100,6 @@ MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
     topLayout->addWidget(m_followCheckbox);
     topLayout->addWidget(m_miniMapCheckbox);
     topLayout->addWidget(m_centerButton);
-    topLayout->addWidget(m_exportButton);
     topLayout->addWidget(m_editBar, 1);
 
     auto *layout = new QVBoxLayout(this);

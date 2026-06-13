@@ -15,8 +15,10 @@ EXPECTED_BYTES = secrets.token_bytes(EXPECTED_BYTES_SIZE)
 CPP_MODULUS_XOR_KEY = 0xA7
 RUNTIME_STRINGS = {
     "web-resource": [":/web", "/index.html"],
-    "http": ["http://127.0.0.1:4939/"],
     "traffic": [":/rwtd"],
+    "disclaimer": [
+        "本工具完全免费，请勿付费购买\nGitHub：https://github.com/h3110w0r1d-y/rocom-helper",
+    ],
 }
 
 
@@ -91,7 +93,7 @@ def print_runtime_string_arrays(seed: bytes) -> None:
         key = runtime_key(seed, purpose)
         print(f"{purpose}:")
         for value in values:
-            raw = value.encode("ascii")
+            raw = value.encode("utf-8" if purpose == "disclaimer" else "ascii")
             encoded = [byte ^ key[index % len(key)] for index, byte in enumerate(raw)]
             print(f"  {value}")
             print("  " + ", ".join(f"0x{byte:02X}" for byte in encoded))

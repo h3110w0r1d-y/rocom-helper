@@ -25,7 +25,7 @@ HttpServerService::HttpServerService(DatabaseService *database, DataCenter *data
 bool HttpServerService::start(quint16 port)
 {
     if (m_tcpServer.isListening()) {
-        return true;
+        return m_port == port;
     }
     if (m_dataCenter == nullptr || !m_dataCenter->runtimeContext().isValid()) {
         emit errorOccurred(QStringLiteral("HTTP 服务启动失败"));
@@ -42,8 +42,18 @@ bool HttpServerService::start(quint16 port)
         return false;
     }
 
+    m_port = port;
     emit statusChanged(QStringLiteral("HTTP 服务监听 http://127.0.0.1:%1").arg(port));
     return true;
+}
+
+bool HttpServerService::restart(quint16 port)
+{
+    if (m_tcpServer.isListening() && m_port == port) {
+        return true;
+    }
+    stop();
+    return start(port);
 }
 
 void HttpServerService::stop()
@@ -55,7 +65,18 @@ void HttpServerService::stop()
     }
     m_sseClients.clear();
     m_tcpServer.close();
+    m_port = 0;
     emit statusChanged(QStringLiteral("HTTP 服务已停止"));
+}
+
+bool HttpServerService::isListening() const
+{
+    return m_tcpServer.isListening();
+}
+
+quint16 HttpServerService::currentPort() const
+{
+    return m_port;
 }
 
 void HttpServerService::rememberLastSsePayload(const QByteArray &payload)
@@ -87,6 +108,7 @@ void HttpServerService::setupRoutes()
     m_server.route(QStringLiteral("/api/health"), QHttpServerRequest::Method::Get, this, [this] {
         return jsonResponse({
             {QStringLiteral("ok"), true},
+            {QStringLiteral("port"), static_cast<int>(m_port)},
             {QStringLiteral("database_ready"), m_database != nullptr && m_database->isOpen()},
         });
     });

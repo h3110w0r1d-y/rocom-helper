@@ -8,3 +8,4 @@
 /doc
 .codegraph
 __pycache__
+/*.svg

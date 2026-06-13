@@ -63,13 +63,13 @@ MainWindow::MainWindow(const RuntimeContext &runtimeContext, QWidget *parent)
 
     buildUi();
     connectSignals();
-    initializeServices();
 
     m_saveTimer.setParent(this);
     connect(&m_saveTimer, &QTimer::timeout, &m_dataCenter, &DataCenter::saveIfDirty);
     m_saveTimer.start(5000);
 
     m_dataCenter.load();
+    initializeServices();
     if (m_database.isOpen()) {
         m_database.resetMapMarkerVisibility();
         m_dataCenter.loadPersistentMarkers(m_database.queryMapMarkers());
@@ -126,37 +126,46 @@ void MainWindow::buildUi()
     m_mapCombo->setToolTip(QStringLiteral("当前地图"));
     m_layerCombo = new QComboBox(this);
     m_layerCombo->setToolTip(QStringLiteral("当前层级"));
-    m_trailCheckbox = new QCheckBox(QStringLiteral("显示轨迹"), this);
+    m_trailCheckbox = new QCheckBox(QStringLiteral("记录轨迹"), this);
     m_trailWidthSpin = new QSpinBox(this);
     m_trailWidthSpin->setRange(1, 500);
     m_trailWidthSpin->setValue(260);
     m_trailWidthSpin->setSuffix(QStringLiteral(" px"));
     m_clearTrailButton = new QPushButton(QStringLiteral("清空轨迹"), this);
-    m_importPathButton = new QPushButton(QStringLiteral("导入path"), this);
-    m_clearPathButton = new QPushButton(QStringLiteral("清空path"), this);
+    m_exportMapButton = new QPushButton(QStringLiteral("导出地图"), this);
+    m_importPathButton = new QPushButton(QStringLiteral("导入路径"), this);
+    m_clearPathButton = new QPushButton(QStringLiteral("清空路径"), this);
     m_markerFilterPanel = new MarkerFilterPanel(this);
 
     mapLayout->addWidget(m_showMapButton, 0, 0);
     mapLayout->addWidget(m_topCheckbox, 0, 1);
-    mapLayout->addWidget(m_miniMapCheckbox, 1, 0, 1, 2);
-    mapLayout->addWidget(m_mapCombo, 2, 0);
-    mapLayout->addWidget(m_layerCombo, 2, 1);
-    mapLayout->addWidget(m_trailCheckbox, 4, 0, 1, 2);
-    mapLayout->addWidget(new QLabel(QStringLiteral("轨迹宽度"), this), 5, 0);
-    mapLayout->addWidget(m_trailWidthSpin, 5, 1);
-    mapLayout->addWidget(m_clearTrailButton, 6, 0, 1, 2);
-    mapLayout->addWidget(m_importPathButton, 7, 0);
-    mapLayout->addWidget(m_clearPathButton, 7, 1);
-    mapLayout->addWidget(m_markerFilterPanel, 8, 0, 1, 2);
+    mapLayout->addWidget(m_miniMapCheckbox, 0, 2);
+    mapLayout->addWidget(m_mapCombo, 1, 0);
+    mapLayout->addWidget(m_layerCombo, 1, 1);
+    mapLayout->addWidget(m_trailCheckbox, 2, 0);
+    mapLayout->addWidget(m_trailWidthSpin, 2, 1);
+    mapLayout->addWidget(m_clearTrailButton, 2, 2);
+    mapLayout->addWidget(m_exportMapButton, 3, 0);
+    mapLayout->addWidget(m_importPathButton, 3, 1);
+    mapLayout->addWidget(m_clearPathButton, 3, 2);
+    mapLayout->addWidget(m_markerFilterPanel, 4, 0, 1, 3);
 
     auto *s2Group = new QGroupBox(QStringLiteral("其他功能"), this);
     auto *s2Layout = new QGridLayout(s2Group);
     m_petFilterButton = new QPushButton(QStringLiteral("宠物管理"), this);
+    m_httpPortSpin = new QSpinBox(this);
+    m_httpPortSpin->setRange(MinHttpPort, MaxHttpPort);
+    m_httpPortSpin->setValue(DefaultHttpPort);
+    m_httpPortSpin->setToolTip(QStringLiteral("宠物管理器 HTTP 端口"));
+    m_applyHttpPortButton = new QPushButton(QStringLiteral("应用端口"), this);
     m_showBoxHintButton = new QPushButton(QStringLiteral("盒子提示"), this);
     m_showCatchButton = new QPushButton(QStringLiteral("捕捉日志"), this);
-    s2Layout->addWidget(m_petFilterButton, 0, 0);
-    s2Layout->addWidget(m_showBoxHintButton, 0, 1);
-    s2Layout->addWidget(m_showCatchButton, 0, 2);
+    s2Layout->addWidget(new QLabel(QStringLiteral("宠物管理端口"), this), 0, 0);
+    s2Layout->addWidget(m_httpPortSpin, 0, 1);
+    s2Layout->addWidget(m_applyHttpPortButton, 0, 2);
+    s2Layout->addWidget(m_petFilterButton, 1, 0);
+    s2Layout->addWidget(m_showBoxHintButton, 1, 1);
+    s2Layout->addWidget(m_showCatchButton, 1, 2);
 
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(trafficGroup);
@@ -174,6 +183,7 @@ void MainWindow::connectSignals()
 
     connect(m_showMapButton, &QPushButton::clicked, this, &MainWindow::showMap);
     connect(m_petFilterButton, &QPushButton::clicked, this, &MainWindow::openPetFilter);
+    connect(m_applyHttpPortButton, &QPushButton::clicked, this, &MainWindow::applyHttpPort);
     connect(m_showBoxHintButton, &QPushButton::clicked, this, &MainWindow::showBoxHint);
     connect(m_showCatchButton, &QPushButton::clicked, this, &MainWindow::showCatch);
     connect(m_topCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setAlwaysOnTop);
@@ -189,6 +199,7 @@ void MainWindow::connectSignals()
     connect(m_trailCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setTrailRecordingEnabled);
     connect(m_trailWidthSpin, &QSpinBox::valueChanged, m_mapWindow, &MapWindow::setTrailWidth);
     connect(m_clearTrailButton, &QPushButton::clicked, m_mapWindow, &MapWindow::clearTrail);
+    connect(m_exportMapButton, &QPushButton::clicked, m_mapWindow, &MapWindow::exportCurrentMapImage);
     connect(m_importPathButton, &QPushButton::clicked, this, &MainWindow::importPathOverlay);
     connect(m_clearPathButton, &QPushButton::clicked, m_mapWindow, &MapWindow::clearPathOverlays);
     connect(m_markerFilterPanel, &MarkerFilterPanel::typeVisibilityChanged, &m_dataCenter, &DataCenter::setMarkerTypeVisible);
@@ -236,7 +247,8 @@ void MainWindow::connectSignals()
 void MainWindow::initializeServices()
 {
     if (m_database.open()) {
-        m_httpServer.start();
+        const quint16 port = static_cast<quint16>(m_dataCenter.baseSnapshot().httpPort);
+        m_httpServer.start(port);
     }
 }
 
@@ -341,7 +353,12 @@ void MainWindow::syncOpcodeProfiles()
 
 void MainWindow::openPetFilter()
 {
-    const QUrl url(m_dataCenter.runtimeContext().petFilterUrl());
+    if (!m_httpServer.isListening()) {
+        m_statusLabel->setText(QStringLiteral("HTTP 服务未启动，无法打开宠物管理"));
+        return;
+    }
+
+    const QUrl url(localPetFilterUrl(m_dataCenter.baseSnapshot().httpPort));
     if (!url.isValid() || url.isEmpty()) {
         m_statusLabel->setText(QStringLiteral("无法打开宠物管理页面"));
         return;
@@ -349,6 +366,26 @@ void MainWindow::openPetFilter()
     if (!QDesktopServices::openUrl(url)) {
         m_statusLabel->setText(QStringLiteral("无法打开宠物管理页面: %1").arg(url.toString()));
     }
+}
+
+void MainWindow::applyHttpPort()
+{
+    const int port = m_httpPortSpin->value();
+    const int previousPort = m_dataCenter.baseSnapshot().httpPort;
+    if (port == previousPort && m_httpServer.isListening() && m_httpServer.currentPort() == port) {
+        return;
+    }
+
+    m_dataCenter.setHttpPort(port);
+    m_dataCenter.save();
+    if (!m_httpServer.restart(static_cast<quint16>(port))) {
+        m_dataCenter.setHttpPort(previousPort);
+        m_dataCenter.save();
+        QSignalBlocker blocker(m_httpPortSpin);
+        m_httpPortSpin->setValue(previousPort);
+        return;
+    }
+    m_statusLabel->setText(QStringLiteral("HTTP 端口已切换为 %1").arg(port));
 }
 
 void MainWindow::importPathOverlay()
@@ -406,6 +443,8 @@ QStringList MainWindow::extractSvgPaths(const QString &filePath) const
 
 void MainWindow::onBaseStateLoaded(const BaseState &state)
 {
+    QSignalBlocker blocker(m_httpPortSpin);
+    m_httpPortSpin->setValue(state.httpPort);
 }
 
 void MainWindow::onMapStateLoaded(const MapState &state)

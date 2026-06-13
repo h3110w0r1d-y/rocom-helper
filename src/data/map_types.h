@@ -179,8 +179,13 @@ struct CatchState {
     QVector<CatchRecord> records;
 };
 
+constexpr int DefaultHttpPort = 4939;
+constexpr int MinHttpPort = 1024;
+constexpr int MaxHttpPort = 65535;
+
 struct BaseState {
     int version = 1;
+    int httpPort = DefaultHttpPort;
 };
 
 MarkerTypeMap defaultMarkerTypes();

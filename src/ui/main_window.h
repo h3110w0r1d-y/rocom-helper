@@ -46,6 +46,7 @@ private:
     void showCatch();
     void showBoxHint();
     void openPetFilter();
+    void applyHttpPort();
     void importPathOverlay();
     QStringList extractSvgPaths(const QString &filePath) const;
     void onBaseStateLoaded(const BaseState &state);
@@ -86,10 +87,13 @@ private:
     QCheckBox *m_trailCheckbox = nullptr;
     QSpinBox *m_trailWidthSpin = nullptr;
     QPushButton *m_clearTrailButton = nullptr;
+    QPushButton *m_exportMapButton = nullptr;
     QPushButton *m_importPathButton = nullptr;
     QPushButton *m_clearPathButton = nullptr;
     MarkerFilterPanel *m_markerFilterPanel = nullptr;
     QPushButton *m_petFilterButton = nullptr;
+    QSpinBox *m_httpPortSpin = nullptr;
+    QPushButton *m_applyHttpPortButton = nullptr;
     QPushButton *m_showBoxHintButton = nullptr;
     QPushButton *m_showCatchButton = nullptr;
     QTimer m_saveTimer;

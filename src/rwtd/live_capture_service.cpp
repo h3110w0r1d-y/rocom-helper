@@ -448,9 +448,6 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
         if (info.addresses.isEmpty()) {
             info.addresses = ipv4Addresses(device);
         }
-        if (info.addresses.isEmpty()) {
-            continue;
-        }
         info.loopback = device->getLoopback();
         info.isDefaultGateway = isDefaultRouteDevice(device, defaultInterface);
         result.append(info);

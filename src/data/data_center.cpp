@@ -89,6 +89,7 @@ void DataCenter::save()
     QDir().mkpath(QFileInfo(baseConfigPath()).absolutePath());
     QJsonObject object{
         {QStringLiteral("version"), m_baseState.version},
+        {QStringLiteral("http_port"), m_baseState.httpPort},
     };
     QFile file(baseConfigPath());
     if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -456,7 +457,24 @@ void DataCenter::loadBaseState()
     }
     const QJsonObject object = doc.object();
     m_baseState.version = object.value(QStringLiteral("version")).toInt(1);
+    m_baseState.httpPort = object.value(QStringLiteral("http_port")).toInt(DefaultHttpPort);
+    if (m_baseState.httpPort < MinHttpPort || m_baseState.httpPort > MaxHttpPort) {
+        m_baseState.httpPort = DefaultHttpPort;
+    }
     m_baseDirty = false;
+}
+
+void DataCenter::setHttpPort(int port)
+{
+    if (port < MinHttpPort || port > MaxHttpPort) {
+        port = DefaultHttpPort;
+    }
+    if (m_baseState.httpPort == port) {
+        return;
+    }
+    m_baseState.httpPort = port;
+    markBaseDirty();
+    emit baseStateChanged(m_baseState);
 }
 
 QString DataCenter::baseConfigPath() const
