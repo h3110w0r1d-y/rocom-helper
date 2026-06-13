@@ -85,9 +85,6 @@ private:
     QWidget *m_editBar = nullptr;
     QWidget *m_topBar = nullptr;
     QList<QShortcut *> m_deleteShortcuts;
-#ifdef Q_OS_WIN
-    QWidget *m_sizeGripBar = nullptr;
-#endif
     bool m_followPlayer = true;
     QString m_currentMapId;
     QString m_currentLayerId;
