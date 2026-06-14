@@ -51,6 +51,7 @@ struct AppEvent {
     EventType type = EventType::Unknown;
     EventSource source = EventSource::Unknown;
     EventFlags flags;
+    quint64 uid = 0;
     QDateTime occurredAt = QDateTime::currentDateTimeUtc();
     QString name;
     QJsonObject payload;

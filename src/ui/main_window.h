@@ -55,8 +55,10 @@ private:
     void onMapStateLoaded(const MapState &state);
     void populateMapCombo(const QString &currentMapId = {});
     void populateLayerCombo(const QString &mapId, const QString &currentLayerId = {});
+    void populateUserCombo();
     void selectMapFromCombo();
     void selectLayerFromCombo();
+    void selectUserFromCombo();
     void onMapChanged(const QString &mapId);
     void onLayerChanged(const QString &layerId);
     void renderMarkerTypeControls(const MarkerTypeMap &markerTypes);
@@ -84,6 +86,7 @@ private:
     QPushButton *m_showMapButton = nullptr;
     QCheckBox *m_topCheckbox = nullptr;
     QCheckBox *m_miniMapCheckbox = nullptr;
+    QComboBox *m_userCombo = nullptr;
     QComboBox *m_mapCombo = nullptr;
     QComboBox *m_layerCombo = nullptr;
     QCheckBox *m_playerPositionLogCheckbox = nullptr;

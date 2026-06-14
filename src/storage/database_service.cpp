@@ -1,6 +1,7 @@
 #include "database_service.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -15,6 +16,16 @@ namespace {
 QString nonNullString(const QString &value, const QString &fallback = QStringLiteral(""))
 {
     return value.isNull() ? fallback : value;
+}
+
+QString petTableName(quint64 uid)
+{
+    return QStringLiteral("pet_info_%1").arg(uid);
+}
+
+QString boxTableName(quint64 uid)
+{
+    return QStringLiteral("box_%1").arg(uid);
 }
 
 } // namespace
@@ -45,7 +56,11 @@ bool DatabaseService::open(const QString &path)
         emit errorOccurred(QStringLiteral("打开 SQLite 失败: %1").arg(m_db.lastError().text()));
         return false;
     }
-    return ensureSchema();
+    if (!ensureSchema()) {
+        return false;
+    }
+    loadUsers();
+    return true;
 }
 
 bool DatabaseService::isOpen() const
@@ -92,15 +107,15 @@ QJsonArray DatabaseService::queryMapMarkers() const
     return rows;
 }
 
-QJsonArray DatabaseService::queryPetInfo() const
+QJsonArray DatabaseService::queryPetInfo(quint64 uid) const
 {
     QJsonArray rows;
-    if (!m_db.isOpen()) {
+    if (!m_db.isOpen() || uid == 0) {
         return rows;
     }
 
     QSqlQuery query(m_db);
-    if (!query.exec(QStringLiteral("select data from pet_info order by id"))) {
+    if (!query.exec(QStringLiteral("select data from %1 order by id").arg(petTableName(uid)))) {
         return rows;
     }
     while (query.next()) {
@@ -112,15 +127,15 @@ QJsonArray DatabaseService::queryPetInfo() const
     return rows;
 }
 
-QJsonArray DatabaseService::queryBoxInfo() const
+QJsonArray DatabaseService::queryBoxInfo(quint64 uid) const
 {
     QJsonArray rows;
-    if (!m_db.isOpen()) {
+    if (!m_db.isOpen() || uid == 0) {
         return rows;
     }
 
     QSqlQuery query(m_db);
-    if (!query.exec(QStringLiteral("select id, data from box order by id"))) {
+    if (!query.exec(QStringLiteral("select id, data from %1 order by id").arg(boxTableName(uid)))) {
         return rows;
     }
     while (query.next()) {
@@ -133,6 +148,37 @@ QJsonArray DatabaseService::queryBoxInfo() const
     return rows;
 }
 
+QJsonArray DatabaseService::queryUsers() const
+{
+    QJsonArray rows;
+    if (!m_db.isOpen()) {
+        return rows;
+    }
+
+    QSqlQuery query(m_db);
+    if (!query.exec(QStringLiteral("select uid, name, avatar from users order by last_seen desc"))) {
+        return rows;
+    }
+    while (query.next()) {
+        rows.append(QJsonObject{
+            {QStringLiteral("uid"), QString::number(query.value(0).toULongLong())},
+            {QStringLiteral("name"), query.value(1).toString()},
+            {QStringLiteral("avatar"), query.value(2).toInt()},
+        });
+    }
+    return rows;
+}
+
+QHash<QString, QByteArray> DatabaseService::allFlowKeys() const
+{
+    return m_flowKeys;
+}
+
+quint64 DatabaseService::uidForFlow(const QString &flowId) const
+{
+    return m_flowUid.value(flowId, 0);
+}
+
 void DatabaseService::handleEvent(const AppEvent &event)
 {
     if (!event.flags.testFlag(EventFlag::Persist)) {
@@ -143,11 +189,17 @@ void DatabaseService::handleEvent(const AppEvent &event)
     case EventType::PetInfoReload:
     case EventType::PetInfoChanged:
     case EventType::PetInfoDeleted:
+        if (event.uid == 0) {
+            return;
+        }
         handlePetInfoEvent(event);
         break;
     case EventType::BoxInfoReload:
     case EventType::BoxInfoChanged:
     case EventType::BoxInfoBoxReplaced:
+        if (event.uid == 0) {
+            return;
+        }
         handleBoxInfoEvent(event);
         break;
     default:
@@ -215,14 +267,13 @@ bool DatabaseService::ensureSchema()
             "extra_json text not null default '{}'"
             ")"),
         QStringLiteral(
-            "create table if not exists pet_info ("
-            "id integer primary key not null,"
-            "data text not null"
-            ")"),
-        QStringLiteral(
-            "create table if not exists box ("
-            "id integer primary key not null,"
-            "data text not null default '[]'"
+            "create table if not exists users ("
+            "uid integer primary key not null,"
+            "name text not null default '',"
+            "avatar integer not null default 0,"
+            "flow_id text,"
+            "aes_key text,"
+            "last_seen integer not null default 0"
             ")"),
     };
     for (const QString &statement : statements) {
@@ -234,16 +285,110 @@ bool DatabaseService::ensureSchema()
     return true;
 }
 
+void DatabaseService::loadUsers()
+{
+    if (!m_db.isOpen()) {
+        return;
+    }
+    m_flowKeys.clear();
+    m_flowUid.clear();
+
+    QSqlQuery query(m_db);
+    if (!query.exec(QStringLiteral("select uid, flow_id, aes_key from users"))) {
+        return;
+    }
+    while (query.next()) {
+        const quint64 uid = query.value(0).toULongLong();
+        const QString flowId = query.value(1).toString();
+        const QByteArray key = QByteArray::fromHex(query.value(2).toString().toLatin1());
+        if (uid == 0 || flowId.isEmpty()) {
+            continue;
+        }
+        m_flowUid.insert(flowId, uid);
+        if (key.size() == 16) {
+            m_flowKeys.insert(flowId, key);
+        }
+        ensureUserTables(uid);
+    }
+}
+
+void DatabaseService::ensureUserTables(quint64 uid)
+{
+    if (!m_db.isOpen() || uid == 0) {
+        return;
+    }
+    QSqlQuery query(m_db);
+    const QStringList statements = {
+        QStringLiteral(
+            "create table if not exists %1 ("
+            "id integer primary key not null,"
+            "data text not null"
+            ")").arg(petTableName(uid)),
+        QStringLiteral(
+            "create table if not exists %1 ("
+            "id integer primary key not null,"
+            "data text not null default '[]'"
+            ")").arg(boxTableName(uid)),
+    };
+    for (const QString &statement : statements) {
+        if (!query.exec(statement)) {
+            emit errorOccurred(QStringLiteral("初始化用户业务表失败: %1").arg(query.lastError().text()));
+        }
+    }
+}
+
+void DatabaseService::rememberFlowKey(const QString &flowId, const QByteArray &key)
+{
+    if (flowId.isEmpty() || key.size() != 16) {
+        return;
+    }
+    m_flowKeys.insert(flowId, key);
+}
+
+void DatabaseService::registerUserLogin(const QString &flowId, quint64 uid, const QString &nameBase64, quint32 avatar)
+{
+    if (!m_db.isOpen() || flowId.isEmpty() || uid == 0) {
+        return;
+    }
+    m_flowUid.insert(flowId, uid);
+    ensureUserTables(uid);
+
+    const QByteArray key = m_flowKeys.value(flowId);
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral(
+        "insert into users(uid, name, avatar, flow_id, aes_key, last_seen) "
+        "values(:uid, :name, :avatar, :flow_id, :aes_key, :last_seen) "
+        "on conflict(uid) do update set "
+        "name=excluded.name,"
+        "avatar=excluded.avatar,"
+        "flow_id=excluded.flow_id,"
+        "aes_key=excluded.aes_key,"
+        "last_seen=excluded.last_seen"));
+    query.bindValue(QStringLiteral(":uid"), uid);
+    query.bindValue(QStringLiteral(":name"), nonNullString(nameBase64));
+    query.bindValue(QStringLiteral(":avatar"), avatar);
+    query.bindValue(QStringLiteral(":flow_id"), flowId);
+    query.bindValue(QStringLiteral(":aes_key"), key.isEmpty() ? QString() : QString::fromLatin1(key.toHex()));
+    query.bindValue(QStringLiteral(":last_seen"), QDateTime::currentSecsSinceEpoch());
+    if (!query.exec()) {
+        emit errorOccurred(QStringLiteral("保存用户信息失败: %1").arg(query.lastError().text()));
+        return;
+    }
+    emit usersChanged();
+}
+
 void DatabaseService::handlePetInfoEvent(const AppEvent &event)
 {
     if (!m_db.isOpen()) {
         return;
     }
+    const quint64 uid = event.uid;
+    ensureUserTables(uid);
     if (event.type == EventType::PetInfoReload) {
         const int pageNo = event.payload.value(QStringLiteral("page_no")).toInt(1);
         if (pageNo == 1) {
             QSqlQuery clear(m_db);
-            if (!clear.exec(QStringLiteral("delete from pet_info"))) {
+            if (!clear.exec(QStringLiteral("delete from %1").arg(petTableName(uid)))) {
                 emit errorOccurred(QStringLiteral("清空宠物信息失败: %1").arg(clear.lastError().text()));
                 return;
             }
@@ -253,7 +398,7 @@ void DatabaseService::handlePetInfoEvent(const AppEvent &event)
             const QJsonObject pet = value.toObject();
             const int petId = pet.value(QStringLiteral("gid")).toInt();
             if (petId > 0) {
-                savePetInfo(petId, pet);
+                savePetInfo(uid, petId, pet);
             }
         }
         return;
@@ -262,14 +407,14 @@ void DatabaseService::handlePetInfoEvent(const AppEvent &event)
         const int petId = event.payload.value(QStringLiteral("id")).toInt();
         const QJsonObject data = event.payload.value(QStringLiteral("data")).toObject();
         if (petId > 0 && !data.isEmpty()) {
-            savePetInfo(petId, data);
+            savePetInfo(uid, petId, data);
         }
         return;
     }
     if (event.type == EventType::PetInfoDeleted) {
         const QJsonArray ids = event.payload.value(QStringLiteral("ids")).toArray();
         QSqlQuery query(m_db);
-        query.prepare(QStringLiteral("delete from pet_info where id = :id"));
+        query.prepare(QStringLiteral("delete from %1 where id = :id").arg(petTableName(uid)));
         for (const QJsonValue &value : ids) {
             query.bindValue(QStringLiteral(":id"), value.toInt());
             if (!query.exec()) {
@@ -284,12 +429,15 @@ void DatabaseService::handleBoxInfoEvent(const AppEvent &event)
     if (!m_db.isOpen()) {
         return;
     }
+    const quint64 uid = event.uid;
+    ensureUserTables(uid);
     if (event.type == EventType::BoxInfoReload) {
-        replaceBoxes(event.payload.value(QStringLiteral("boxes")).toArray());
+        replaceBoxes(uid, event.payload.value(QStringLiteral("boxes")).toArray());
         return;
     }
     if (event.type == EventType::BoxInfoChanged) {
         changeBoxSlot(
+            uid,
             event.payload.value(QStringLiteral("id")).toInt(),
             event.payload.value(QStringLiteral("pos")).toInt(),
             event.payload.value(QStringLiteral("pet_gid")).toInt());
@@ -297,17 +445,18 @@ void DatabaseService::handleBoxInfoEvent(const AppEvent &event)
     }
     if (event.type == EventType::BoxInfoBoxReplaced) {
         replaceBox(
+            uid,
             event.payload.value(QStringLiteral("id")).toInt(),
             event.payload.value(QStringLiteral("data")).toArray());
     }
 }
 
-void DatabaseService::savePetInfo(int petId, const QJsonObject &data)
+void DatabaseService::savePetInfo(quint64 uid, int petId, const QJsonObject &data)
 {
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
-        "insert into pet_info(id, data) values(:id, :data) "
-        "on conflict(id) do update set data = excluded.data"));
+        "insert into %1(id, data) values(:id, :data) "
+        "on conflict(id) do update set data = excluded.data").arg(petTableName(uid)));
     query.bindValue(QStringLiteral(":id"), petId);
     query.bindValue(QStringLiteral(":data"), QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact)));
     if (!query.exec()) {
@@ -315,16 +464,16 @@ void DatabaseService::savePetInfo(int petId, const QJsonObject &data)
     }
 }
 
-void DatabaseService::replaceBoxes(const QJsonArray &boxes)
+void DatabaseService::replaceBoxes(quint64 uid, const QJsonArray &boxes)
 {
     QSqlQuery clear(m_db);
-    if (!clear.exec(QStringLiteral("delete from box"))) {
+    if (!clear.exec(QStringLiteral("delete from %1").arg(boxTableName(uid)))) {
         emit errorOccurred(QStringLiteral("清空仓库信息失败: %1").arg(clear.lastError().text()));
         return;
     }
 
     QSqlQuery query(m_db);
-    query.prepare(QStringLiteral("insert into box(id, data) values(:id, :data)"));
+    query.prepare(QStringLiteral("insert into %1(id, data) values(:id, :data)").arg(boxTableName(uid)));
     for (const QJsonValue &value : boxes) {
         const QJsonObject box = value.toObject();
         query.bindValue(QStringLiteral(":id"), box.value(QStringLiteral("id")).toInt());
@@ -336,12 +485,12 @@ void DatabaseService::replaceBoxes(const QJsonArray &boxes)
     }
 }
 
-void DatabaseService::replaceBox(int boxId, const QJsonArray &data)
+void DatabaseService::replaceBox(quint64 uid, int boxId, const QJsonArray &data)
 {
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
-        "insert into box(id, data) values(:id, :data) "
-        "on conflict(id) do update set data = excluded.data"));
+        "insert into %1(id, data) values(:id, :data) "
+        "on conflict(id) do update set data = excluded.data").arg(boxTableName(uid)));
     query.bindValue(QStringLiteral(":id"), boxId);
     query.bindValue(QStringLiteral(":data"), QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact)));
     if (!query.exec()) {
@@ -349,7 +498,7 @@ void DatabaseService::replaceBox(int boxId, const QJsonArray &data)
     }
 }
 
-void DatabaseService::changeBoxSlot(int boxId, int pos, int value)
+void DatabaseService::changeBoxSlot(quint64 uid, int boxId, int pos, int value)
 {
     if (pos < 0 || pos >= 30) {
         return;
@@ -357,7 +506,7 @@ void DatabaseService::changeBoxSlot(int boxId, int pos, int value)
 
     QJsonArray data;
     QSqlQuery select(m_db);
-    select.prepare(QStringLiteral("select data from box where id = :id"));
+    select.prepare(QStringLiteral("select data from %1 where id = :id").arg(boxTableName(uid)));
     select.bindValue(QStringLiteral(":id"), boxId);
     if (select.exec() && select.next()) {
         const QJsonDocument doc = QJsonDocument::fromJson(select.value(0).toString().toUtf8());
@@ -372,8 +521,8 @@ void DatabaseService::changeBoxSlot(int boxId, int pos, int value)
 
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral(
-        "insert into box(id, data) values(:id, :data) "
-        "on conflict(id) do update set data = excluded.data"));
+        "insert into %1(id, data) values(:id, :data) "
+        "on conflict(id) do update set data = excluded.data").arg(boxTableName(uid)));
     query.bindValue(QStringLiteral(":id"), boxId);
     query.bindValue(QStringLiteral(":data"), QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact)));
     if (!query.exec()) {

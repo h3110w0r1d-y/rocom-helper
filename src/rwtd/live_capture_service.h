@@ -1,6 +1,5 @@
 #pragma once
 
-#include "key_cache.h"
 #include "opcode_filter.h"
 #include "tgcp_parser.h"
 
@@ -34,12 +33,14 @@ public:
     void stop();
     bool isRunning() const;
     void setOpcodeFilter(OpcodeFilter *filter);
+    void preloadFlowKeys(const QHash<QString, QByteArray> &keys);
 
 public slots:
     void updateEnabledOpcodes(const QSet<quint32> &opcodes);
 
 signals:
     void actionDecoded(const rwtd::DecodedAction &action);
+    void flowKeyEstablished(const QString &flowId, const QByteArray &key);
     void statusChanged(const QString &message);
     void errorOccurred(const QString &message);
 
@@ -65,7 +66,6 @@ private:
     quint16 m_port = DefaultPort;
     bool m_running = false;
 
-    AesKeyCache m_keyCache;
     OpcodeFilter *m_opcodeFilter = nullptr;
     QSet<quint32> m_enabledOpcodes;
     QHash<QString, QByteArray> m_flowKeys;

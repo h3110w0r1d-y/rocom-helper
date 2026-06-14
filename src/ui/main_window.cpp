@@ -11,7 +11,10 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QRegularExpression>
@@ -124,6 +127,8 @@ void MainWindow::buildUi()
     m_showMapButton = new QPushButton(QStringLiteral("显示地图"), this);
     m_topCheckbox = new QCheckBox(QStringLiteral("置顶"), this);
     m_miniMapCheckbox = new QCheckBox(QStringLiteral("小地图模式"), this);
+    m_userCombo = new QComboBox(this);
+    m_userCombo->setToolTip(QStringLiteral("筛选用户移动"));
     m_mapCombo = new QComboBox(this);
     m_mapCombo->setToolTip(QStringLiteral("当前地图"));
     m_layerCombo = new QComboBox(this);
@@ -142,8 +147,9 @@ void MainWindow::buildUi()
     mapLayout->addWidget(m_showMapButton, 0, 0);
     mapLayout->addWidget(m_topCheckbox, 0, 1);
     mapLayout->addWidget(m_miniMapCheckbox, 0, 2);
-    mapLayout->addWidget(m_mapCombo, 1, 0);
-    mapLayout->addWidget(m_layerCombo, 1, 1);
+    mapLayout->addWidget(m_userCombo, 1, 0);
+    mapLayout->addWidget(m_mapCombo, 1, 1);
+    mapLayout->addWidget(m_layerCombo, 1, 2);
     mapLayout->addWidget(m_trailCheckbox, 2, 0);
     mapLayout->addWidget(m_trailWidthSpin, 2, 1);
     mapLayout->addWidget(m_clearTrailButton, 2, 2);
@@ -201,6 +207,10 @@ void MainWindow::connectSignals()
     connect(m_layerCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
         selectLayerFromCombo();
     });
+    connect(m_userCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
+        selectUserFromCombo();
+    });
+    connect(&m_database, &DatabaseService::usersChanged, this, &MainWindow::populateUserCombo);
     connect(m_trailCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setTrailRecordingEnabled);
     connect(m_trailWidthSpin, &QSpinBox::valueChanged, m_mapWindow, &MapWindow::setTrailWidth);
     connect(m_clearTrailButton, &QPushButton::clicked, m_mapWindow, &MapWindow::clearTrail);
@@ -219,8 +229,11 @@ void MainWindow::connectSignals()
 
     m_capture.setOpcodeFilter(&m_opcodeFilter);
     m_trafficEventMapper.setOpcodeFilter(&m_opcodeFilter);
+    m_trafficEventMapper.setDatabaseService(&m_database);
     connect(&m_opcodeFilter, &rwtd::OpcodeFilter::enabledOpcodesChanged,
             &m_capture, &rwtd::LiveCaptureService::updateEnabledOpcodes);
+    connect(&m_capture, &rwtd::LiveCaptureService::flowKeyEstablished,
+            &m_database, &DatabaseService::rememberFlowKey);
     connect(m_mapWindow, &MapWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
     connect(m_catchWindow, &CatchWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
     connect(m_boxHintWindow, &BoxHintWindow::opcodeConsumerVisibilityChanged, this, &MainWindow::syncOpcodeProfiles);
@@ -254,6 +267,8 @@ void MainWindow::connectSignals()
 void MainWindow::initializeServices()
 {
     if (m_database.open()) {
+        m_capture.preloadFlowKeys(m_database.allFlowKeys());
+        populateUserCombo();
         const quint16 port = static_cast<quint16>(m_dataCenter.baseSnapshot().httpPort);
         m_httpServer.start(port);
     }
@@ -499,6 +514,46 @@ void MainWindow::populateLayerCombo(const QString &mapId, const QString &current
             m_layerCombo->setCurrentIndex(index);
         }
     }
+}
+
+void MainWindow::populateUserCombo()
+{
+    const quint64 current = m_userCombo->currentData().isValid()
+        ? m_userCombo->currentData().toULongLong()
+        : 0;
+
+    {
+        QSignalBlocker blocker(m_userCombo);
+        m_userCombo->clear();
+
+        const QJsonArray users = m_database.queryUsers();
+        for (const QJsonValue &value : users) {
+            const QJsonObject user = value.toObject();
+            const quint64 uid = user.value(QStringLiteral("uid")).toString().toULongLong();
+            if (uid == 0) {
+                continue;
+            }
+            const QString rawName = user.value(QStringLiteral("name")).toString();
+            const QByteArray decoded = QByteArray::fromBase64(rawName.toUtf8());
+            QString displayName = decoded.isEmpty() ? rawName : QString::fromUtf8(decoded);
+            if (displayName.isEmpty()) {
+                displayName = QString::number(uid);
+            }
+            m_userCombo->addItem(displayName, QVariant(static_cast<qulonglong>(uid)));
+        }
+
+        const int index = m_userCombo->findData(QVariant(static_cast<qulonglong>(current)));
+        if (index >= 0) {
+            m_userCombo->setCurrentIndex(index);
+        }
+    }
+
+    selectUserFromCombo();
+}
+
+void MainWindow::selectUserFromCombo()
+{
+    m_dataCenter.setSelectedUid(m_userCombo->currentData().toULongLong());
 }
 
 void MainWindow::selectMapFromCombo()

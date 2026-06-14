@@ -162,6 +162,11 @@ void DataCenter::setFollowPlayerMap(bool enabled)
     m_followPlayerMap = enabled;
 }
 
+void DataCenter::setSelectedUid(quint64 uid)
+{
+    m_selectedUid = uid;
+}
+
 void DataCenter::setCurrentMap(const QString &mapId)
 {
     const MapConfig *config = m_catalog.mapById(mapId);
@@ -405,6 +410,9 @@ void DataCenter::handleEvent(const AppEvent &event)
 {
     switch (event.type) {
     case EventType::PlayerPositionChanged:
+        if (m_selectedUid != 0 && event.uid != m_selectedUid) {
+            break;
+        }
         if (event.playerPosition.has_value()) {
             const PlayerPositionPayload &position = *event.playerPosition;
             updatePlayer(

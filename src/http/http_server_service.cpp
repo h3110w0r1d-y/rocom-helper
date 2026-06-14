@@ -9,6 +9,7 @@
 #include <QHttpServerRequest>
 #include <QJsonDocument>
 #include <QMimeDatabase>
+#include <QUrlQuery>
 
 #include <utility>
 
@@ -58,9 +59,9 @@ bool HttpServerService::restart(quint16 port)
 
 void HttpServerService::stop()
 {
-    for (const std::unique_ptr<QHttpServerResponder> &client : m_sseClients) {
-        if (!client->isResponseCanceled()) {
-            client->writeEndChunked(QByteArray());
+    for (const SseClient &client : m_sseClients) {
+        if (!client.responder->isResponseCanceled()) {
+            client.responder->writeEndChunked(QByteArray());
         }
     }
     m_sseClients.clear();
@@ -79,16 +80,21 @@ quint16 HttpServerService::currentPort() const
     return m_port;
 }
 
-void HttpServerService::rememberLastSsePayload(const QByteArray &payload)
+void HttpServerService::rememberLastSsePayload(quint64 uid, const QByteArray &payload)
 {
-    m_lastSsePayload = payload;
+    m_lastSsePayloadByUid.insert(uid, payload);
 
     for (auto it = m_sseClients.begin(); it != m_sseClients.end();) {
-        if ((*it)->isResponseCanceled()) {
+        if (it->responder->isResponseCanceled()) {
             it = m_sseClients.erase(it);
             continue;
         }
-        (*it)->writeChunk(payload);
+        // uid == 0 events are global and broadcast to everyone; otherwise only
+        // clients subscribed to that uid (or unfiltered clients) receive it.
+        const bool deliver = uid == 0 || it->uid == 0 || it->uid == uid;
+        if (deliver) {
+            it->responder->writeChunk(payload);
+        }
         ++it;
     }
 }
@@ -113,22 +119,41 @@ void HttpServerService::setupRoutes()
         });
     });
 
-    m_server.route(QStringLiteral("/api/pet-info"), QHttpServerRequest::Method::Get, this, [this] {
-        return jsonArrayResponse(m_database != nullptr ? m_database->queryPetInfo() : QJsonArray());
+    m_server.route(QStringLiteral("/api/pet-info"), QHttpServerRequest::Method::Get, this,
+                   [this](const QHttpServerRequest &request) {
+        const quint64 uid = uidFromRequest(request);
+        return jsonArrayResponse(m_database != nullptr ? m_database->queryPetInfo(uid) : QJsonArray());
     });
 
-    m_server.route(QStringLiteral("/api/box-info"), QHttpServerRequest::Method::Get, this, [this] {
-        return jsonArrayResponse(m_database != nullptr ? m_database->queryBoxInfo() : QJsonArray());
+    m_server.route(QStringLiteral("/api/box-info"), QHttpServerRequest::Method::Get, this,
+                   [this](const QHttpServerRequest &request) {
+        const quint64 uid = uidFromRequest(request);
+        return jsonArrayResponse(m_database != nullptr ? m_database->queryBoxInfo(uid) : QJsonArray());
+    });
+
+    m_server.route(QStringLiteral("/api/users"), QHttpServerRequest::Method::Get, this, [this] {
+        return jsonArrayResponse(m_database != nullptr ? m_database->queryUsers() : QJsonArray());
     });
 
     m_server.route(QStringLiteral("/events"), QHttpServerRequest::Method::Get, this,
-                   [this](QHttpServerResponder &&responder) {
-        acceptSseClient(std::move(responder));
+                   [this](const QHttpServerRequest &request, QHttpServerResponder &&responder) {
+        acceptSseClient(std::move(responder), uidFromRequest(request));
     });
     m_server.route(QStringLiteral("/api/events"), QHttpServerRequest::Method::Get, this,
-                   [this](QHttpServerResponder &&responder) {
-        acceptSseClient(std::move(responder));
+                   [this](const QHttpServerRequest &request, QHttpServerResponder &&responder) {
+        acceptSseClient(std::move(responder), uidFromRequest(request));
     });
+}
+
+quint64 HttpServerService::uidFromRequest(const QHttpServerRequest &request)
+{
+    const QString value = request.query().queryItemValue(QStringLiteral("uid"));
+    if (value.isEmpty()) {
+        return 0;
+    }
+    bool ok = false;
+    const quint64 uid = value.toULongLong(&ok);
+    return ok ? uid : 0;
 }
 
 QHttpServerResponse HttpServerService::staticWebResponse(const QHttpServerRequest &request) const
@@ -182,15 +207,24 @@ QHttpServerResponse HttpServerService::jsonArrayResponse(const QJsonArray &array
         QJsonDocument(array).toJson(QJsonDocument::Compact));
 }
 
-void HttpServerService::acceptSseClient(QHttpServerResponder &&responder)
+void HttpServerService::acceptSseClient(QHttpServerResponder &&responder, quint64 uid)
 {
-    const QByteArray payload = m_lastSsePayload.isEmpty()
-        ? QByteArray("event: ready\ndata: {\"ok\":true}\n\n")
-        : m_lastSsePayload;
-    auto client = std::make_unique<QHttpServerResponder>(std::move(responder));
-    client->writeBeginChunked(QByteArrayLiteral("text/event-stream"));
-    client->writeChunk(payload);
-    m_sseClients.push_back(std::move(client));
+    auto responderPtr = std::make_unique<QHttpServerResponder>(std::move(responder));
+    responderPtr->writeBeginChunked(QByteArrayLiteral("text/event-stream"));
+    responderPtr->writeChunk(QByteArray("event: ready\ndata: {\"ok\":true}\n\n"));
+
+    const QByteArray globalPayload = m_lastSsePayloadByUid.value(0);
+    if (!globalPayload.isEmpty()) {
+        responderPtr->writeChunk(globalPayload);
+    }
+    if (uid != 0) {
+        const QByteArray userPayload = m_lastSsePayloadByUid.value(uid);
+        if (!userPayload.isEmpty()) {
+            responderPtr->writeChunk(userPayload);
+        }
+    }
+
+    m_sseClients.push_back(SseClient{std::move(responderPtr), uid});
 }
 
 } // namespace app

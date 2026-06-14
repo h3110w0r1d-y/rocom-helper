@@ -40,6 +40,7 @@ public:
 
     void setRuntimeContext(const RuntimeContext &context);
     void setFollowPlayerMap(bool enabled);
+    void setSelectedUid(quint64 uid);
     void setCurrentMap(const QString &mapId);
     void setCurrentLayer(const QString &layerId);
     void setMarkerTypeVisible(const QString &markerType, bool visible);
@@ -124,6 +125,7 @@ private:
     RuntimeContext m_runtimeContext;
     bool m_baseDirty = false;
     bool m_followPlayerMap = true;
+    quint64 m_selectedUid = 0;
 };
 
 } // namespace app

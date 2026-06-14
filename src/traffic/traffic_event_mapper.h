@@ -11,6 +11,8 @@ class OpcodeFilter;
 
 namespace app {
 
+class DatabaseService;
+
 class TrafficEventMapper : public QObject {
     Q_OBJECT
 
@@ -18,6 +20,7 @@ public:
     explicit TrafficEventMapper(QObject *parent = nullptr);
 
     void setOpcodeFilter(rwtd::OpcodeFilter *filter);
+    void setDatabaseService(DatabaseService *database);
 
 public slots:
     void mapDecodedAction(const rwtd::DecodedAction &action);
@@ -27,6 +30,7 @@ signals:
 
 private:
     rwtd::OpcodeFilter *m_opcodeFilter = nullptr;
+    DatabaseService *m_database = nullptr;
 };
 
 } // namespace app

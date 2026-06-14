@@ -17,7 +17,7 @@ public slots:
     void handleEvent(const app::AppEvent &event);
 
 signals:
-    void ssePayloadReady(const QByteArray &payload);
+    void ssePayloadReady(quint64 uid, const QByteArray &payload);
 };
 
 } // namespace app

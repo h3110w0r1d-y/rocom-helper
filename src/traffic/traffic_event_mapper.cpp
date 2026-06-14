@@ -1,5 +1,6 @@
 #include "traffic_event_mapper.h"
 
+#include "storage/database_service.h"
 #include "traffic/protobuf_json_util.h"
 
 #include <QByteArray>
@@ -228,6 +229,11 @@ void TrafficEventMapper::setOpcodeFilter(rwtd::OpcodeFilter *filter)
     m_opcodeFilter = filter;
 }
 
+void TrafficEventMapper::setDatabaseService(DatabaseService *database)
+{
+    m_database = database;
+}
+
 void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
 {
     const QHash<quint32, rwtd::ZoneOpcode> &opcodeLookup = rwtd::usedZoneOpcodeByRaw();
@@ -236,34 +242,42 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         return;
     }
 
-    auto emitEvent = [this](EventType type, const QJsonObject &payload, EventFlags flags) {
+    const QString flowId = action.flowId;
+    auto resolveUid = [this, flowId]() -> quint64 {
+        return m_database != nullptr ? m_database->uidForFlow(flowId) : 0;
+    };
+
+    auto emitEvent = [this](EventType type, const QJsonObject &payload, EventFlags flags, quint64 uid) {
         AppEvent event;
         event.type = type;
         event.source = EventSource::Traffic;
         event.flags = flags;
+        event.uid = uid;
         event.name = eventTypeName(type);
         event.payload = payload;
         emit eventCreated(event);
     };
 
     auto emitUiEvent = [&emitEvent](EventType type, const QJsonObject &payload) {
-        emitEvent(type, payload, EventFlag::UpdateUi);
+        emitEvent(type, payload, EventFlag::UpdateUi, 0);
     };
     auto emitBusinessEvent = [&emitEvent](EventType type, const QJsonObject &payload) {
-        emitEvent(type, payload, EventFlag::Persist | EventFlag::UpdateUi | EventFlag::PushSse);
+        emitEvent(type, payload, EventFlag::Persist | EventFlag::UpdateUi | EventFlag::PushSse, 0);
     };
-    auto emitCatchRecordEvent = [this](const CatchRecord &record) {
+    auto emitCatchRecordEvent = [this, &resolveUid](const CatchRecord &record) {
         if (m_opcodeFilter != nullptr
             && !m_opcodeFilter->isUiProfileEnabled(rwtd::OpcodeProfile::CatchLog)) {
             return;
         }
-        emit eventCreated(makeCatchRecordAddedEvent(
+        AppEvent event = makeCatchRecordAddedEvent(
             EventSource::Traffic,
             EventFlag::Persist | EventFlag::UpdateUi | EventFlag::PushSse,
-            record));
+            record);
+        event.uid = resolveUid();
+        emit eventCreated(event);
     };
-    auto emitExternalEvent = [&emitEvent](EventType type, const QJsonObject &payload) {
-        emitEvent(type, payload, EventFlag::Persist | EventFlag::PushSse);
+    auto emitExternalEvent = [&emitEvent, &resolveUid](EventType type, const QJsonObject &payload) {
+        emitEvent(type, payload, EventFlag::Persist | EventFlag::PushSse, resolveUid());
     };
 
     auto processPetDataChanged = [&emitExternalEvent](const Next::PetData &petData) {
@@ -448,7 +462,9 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
             ? gameRotationToMapRotation(message.ctrl_rot())
             : position.rotation;
         position.visible = true;
-        emit eventCreated(makePlayerPositionChangedEvent(EventSource::Traffic, EventFlag::UpdateUi, position));
+        AppEvent positionEvent = makePlayerPositionChangedEvent(EventSource::Traffic, EventFlag::UpdateUi, position);
+        positionEvent.uid = resolveUid();
+        emit eventCreated(positionEvent);
         return;
     }
     case rwtd::ZoneOpcode::ZoneSceneClientEnterSceneFinishNtyAck: {
@@ -487,13 +503,31 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
     }
     case rwtd::ZoneOpcode::ZoneLoginRsp: {
         Next::ZoneLoginRsp message;
-        if (!parseMessage(payload, message) || !message.has_player_info() || !message.player_info().has_pet_info()
-            || !message.player_info().pet_info().has_backpack_info()) {
+        if (!parseMessage(payload, message) || !message.has_player_info()) {
+            return;
+        }
+        const Next::PlayerInfo &playerInfo = message.player_info();
+        if (m_database != nullptr && playerInfo.has_brief_info()) {
+            const Next::PlayerBriefInfo &briefInfo = playerInfo.brief_info();
+            const quint64 uin = briefInfo.has_uin() ? briefInfo.uin() : 0;
+            const QString nameBase64 = briefInfo.has_name()
+                ? QString::fromStdString(briefInfo.name())
+                : QString();
+            quint32 avatar = 0;
+            if (briefInfo.has_additional_data() && briefInfo.additional_data().has_card_brief_info()
+                && briefInfo.additional_data().card_brief_info().has_card_icon_selected()) {
+                avatar = briefInfo.additional_data().card_brief_info().card_icon_selected();
+            }
+            if (uin != 0) {
+                m_database->registerUserLogin(flowId, uin, nameBase64, avatar);
+            }
+        }
+        if (!playerInfo.has_pet_info() || !playerInfo.pet_info().has_backpack_info()) {
             return;
         }
         emitExternalEvent(EventType::BoxInfoReload, {
             {QStringLiteral("boxes"),
-             boxesFromPetBoxes(message.player_info().pet_info().backpack_info().boxes())},
+             boxesFromPetBoxes(playerInfo.pet_info().backpack_info().boxes())},
         });
         return;
     }

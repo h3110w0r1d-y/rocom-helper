@@ -56,7 +56,7 @@ void SseBroadcaster::handleEvent(const AppEvent &event)
     payload.append("\ndata: ");
     payload.append(json);
     payload.append("\n\n");
-    emit ssePayloadReady(payload);
+    emit ssePayloadReady(event.uid, payload);
 }
 
 } // namespace app

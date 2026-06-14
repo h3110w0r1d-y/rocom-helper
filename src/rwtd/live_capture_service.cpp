@@ -79,15 +79,6 @@ QStringList qtInterfaceIpv4Addresses(const QString &interfaceName)
     return result;
 }
 
-QString defaultKeyPath()
-{
-    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dataDir.isEmpty()) {
-        dataDir = QCoreApplication::applicationDirPath();
-    }
-    return QDir(dataDir).filePath(QStringLiteral("traffic_key.json"));
-}
-
 QString defaultRouteInterfaceName()
 {
 #if defined(__APPLE__)
@@ -394,10 +385,19 @@ bool isDefaultRouteDevice(const pcpp::PcapLiveDevice *device, const QString &def
 
 LiveCaptureService::LiveCaptureService(QObject *parent)
     : QObject(parent)
-    , m_keyCache(defaultKeyPath())
     , m_enabledOpcodes(allUsedOpcodes())
 {
     qRegisterMetaType<rwtd::DecodedAction>("rwtd::DecodedAction");
+}
+
+void LiveCaptureService::preloadFlowKeys(const QHash<QString, QByteArray> &keys)
+{
+    QMutexLocker locker(&m_mutex);
+    for (auto it = keys.constBegin(); it != keys.constEnd(); ++it) {
+        if (it.value().size() == 16) {
+            m_flowKeys.insert(it.key(), it.value());
+        }
+    }
 }
 
 void LiveCaptureService::setOpcodeFilter(OpcodeFilter *filter)
@@ -488,7 +488,6 @@ bool LiveCaptureService::start(const QString &deviceName, quint16 port)
     }
 
     m_port = port;
-    m_flowKeys.clear();
     m_streamParsers.clear();
     m_processedPackets.clear();
     m_reassembly = std::make_unique<pcpp::TcpReassembly>(
@@ -671,14 +670,7 @@ QString LiveCaptureService::streamKey(const QString &flowId, TrafficDirection di
 
 QByteArray LiveCaptureService::keyForFlow(const QString &flowId)
 {
-    QByteArray key = m_flowKeys.value(flowId);
-    if (key.isEmpty()) {
-        key = m_keyCache.keyForFlow(flowId);
-        if (key.size() == 16) {
-            m_flowKeys.insert(flowId, key);
-        }
-    }
-    return key;
+    return m_flowKeys.value(flowId);
 }
 
 void LiveCaptureService::rememberFlowKey(const QString &flowId, const QByteArray &key)
@@ -686,9 +678,11 @@ void LiveCaptureService::rememberFlowKey(const QString &flowId, const QByteArray
     if (key.size() != 16) {
         return;
     }
-    m_flowKeys.clear();
+    if (m_flowKeys.value(flowId) == key) {
+        return;
+    }
     m_flowKeys.insert(flowId, key);
-    m_keyCache.rememberKey(flowId, key);
+    emit flowKeyEstablished(flowId, key);
 }
 
 } // namespace rwtd
