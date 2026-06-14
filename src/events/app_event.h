@@ -30,6 +30,7 @@ enum class EventType {
     PetInfoDeleted,
     BoxInfoReload,
     BoxInfoChanged,
+    BoxInfoBoxReplaced,
 };
 
 enum class EventSource {
@@ -94,6 +95,8 @@ inline QString eventTypeName(EventType type)
         return QStringLiteral("box.reload");
     case EventType::BoxInfoChanged:
         return QStringLiteral("box.changed");
+    case EventType::BoxInfoBoxReplaced:
+        return QStringLiteral("box.replaced");
     case EventType::Unknown:
         break;
     }

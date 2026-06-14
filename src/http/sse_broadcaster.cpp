@@ -42,6 +42,10 @@ void SseBroadcaster::handleEvent(const AppEvent &event)
         sseEventName = QStringLiteral("box_changed");
         data = event.payload;
         break;
+    case EventType::BoxInfoBoxReplaced:
+        sseEventName = QStringLiteral("box_replaced");
+        data = event.payload;
+        break;
     default:
         break;
     }

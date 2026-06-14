@@ -39,6 +39,7 @@ private:
     void handleBoxInfoEvent(const app::AppEvent &event);
     void savePetInfo(int petId, const QJsonObject &data);
     void replaceBoxes(const QJsonArray &boxes);
+    void replaceBox(int boxId, const QJsonArray &data);
     void changeBoxSlot(int boxId, int pos, int value);
     QString defaultDatabasePath() const;
 

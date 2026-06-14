@@ -147,6 +147,7 @@ void DatabaseService::handleEvent(const AppEvent &event)
         break;
     case EventType::BoxInfoReload:
     case EventType::BoxInfoChanged:
+    case EventType::BoxInfoBoxReplaced:
         handleBoxInfoEvent(event);
         break;
     default:
@@ -291,7 +292,13 @@ void DatabaseService::handleBoxInfoEvent(const AppEvent &event)
         changeBoxSlot(
             event.payload.value(QStringLiteral("id")).toInt(),
             event.payload.value(QStringLiteral("pos")).toInt(),
-            event.payload.value(QStringLiteral("value")).toInt());
+            event.payload.value(QStringLiteral("pet_gid")).toInt());
+        return;
+    }
+    if (event.type == EventType::BoxInfoBoxReplaced) {
+        replaceBox(
+            event.payload.value(QStringLiteral("id")).toInt(),
+            event.payload.value(QStringLiteral("data")).toArray());
     }
 }
 
@@ -326,6 +333,19 @@ void DatabaseService::replaceBoxes(const QJsonArray &boxes)
         if (!query.exec()) {
             emit errorOccurred(QStringLiteral("保存仓库信息失败: %1").arg(query.lastError().text()));
         }
+    }
+}
+
+void DatabaseService::replaceBox(int boxId, const QJsonArray &data)
+{
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral(
+        "insert into box(id, data) values(:id, :data) "
+        "on conflict(id) do update set data = excluded.data"));
+    query.bindValue(QStringLiteral(":id"), boxId);
+    query.bindValue(QStringLiteral(":data"), QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact)));
+    if (!query.exec()) {
+        emit errorOccurred(QStringLiteral("保存仓库信息失败: %1").arg(query.lastError().text()));
     }
 }
 

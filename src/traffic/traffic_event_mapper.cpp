@@ -120,14 +120,23 @@ QJsonArray petGidsToJsonArray(const google::protobuf::RepeatedField<quint32> &pe
     return array;
 }
 
+QJsonObject boxJsonFromPetBox(const Next::PetBox &box, int fallbackId = -1)
+{
+    int boxId = fallbackId;
+    if (box.has_box_id()) {
+        boxId = static_cast<int>(box.box_id()) - 1;
+    }
+    return {
+        {QStringLiteral("id"), boxId < 0 ? 0 : boxId},
+        {QStringLiteral("data"), petGidsToJsonArray(box.pet_gid())},
+    };
+}
+
 QJsonArray boxesFromPetBoxes(const google::protobuf::RepeatedPtrField<Next::PetBox> &boxes)
 {
     QJsonArray result;
     for (int i = 0; i < boxes.size(); ++i) {
-        result.append(QJsonObject{
-            {QStringLiteral("id"), i},
-            {QStringLiteral("data"), petGidsToJsonArray(boxes.Get(i).pet_gid())},
-        });
+        result.append(boxJsonFromPetBox(boxes.Get(i), i));
     }
     return result;
 }
@@ -268,14 +277,37 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         });
     };
 
-    auto processGoodsChange = [&processPetDataChanged, &emitExternalEvent](const Next::GoodsChange &goodsChange) {
+    auto processPetDeleted = [&emitExternalEvent](int petId) {
+        if (petId <= 0) {
+            return;
+        }
+        emitExternalEvent(EventType::PetInfoDeleted, {{QStringLiteral("ids"), QJsonArray{petId}}});
+    };
+
+    auto petIdFromGoodsChange = [](const Next::GoodsChangeItem &change) -> int {
+        if (change.has_gid()) {
+            return static_cast<int>(change.gid());
+        }
+        if (change.has_pet_data() && change.pet_data().has_gid()) {
+            return static_cast<int>(change.pet_data().gid());
+        }
+        if (change.has_id()) {
+            return static_cast<int>(change.id());
+        }
+        return 0;
+    };
+
+    auto processGoodsChange = [&processPetDataChanged, &processPetDeleted, &petIdFromGoodsChange, &emitExternalEvent](
+                                  const Next::GoodsChange &goodsChange) {
         for (const Next::GoodsChangeItem &change : goodsChange.changes()) {
             if (!change.has_type()) {
                 continue;
             }
             const auto changeType = change.type();
             if (changeType == dataconfig::GT_PET) {
-                if (change.has_pet_data()) {
+                if (change.has_num() && change.num() == 0) {
+                    processPetDeleted(petIdFromGoodsChange(change));
+                } else if (change.has_pet_data()) {
                     processPetDataChanged(change.pet_data());
                 }
             } else if (changeType == dataconfig::GT_PETBOX_PET_CHANGE) {
@@ -286,8 +318,13 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
                 emitExternalEvent(EventType::BoxInfoChanged, {
                     {QStringLiteral("id"), boxChange.has_id() ? static_cast<int>(boxChange.id()) - 1 : 0},
                     {QStringLiteral("pos"), boxChange.has_pos() ? static_cast<int>(boxChange.pos()) - 1 : 0},
-                    {QStringLiteral("value"), boxChange.has_pet_gid() ? static_cast<int>(boxChange.pet_gid()) : 0},
+                    {QStringLiteral("pet_gid"), boxChange.has_pet_gid() ? static_cast<int>(boxChange.pet_gid()) : 0},
                 });
+            } else if (changeType == dataconfig::GT_PETBOX_BOX_INFO) {
+                if (!change.has_box_info()) {
+                    continue;
+                }
+                emitExternalEvent(EventType::BoxInfoBoxReplaced, boxJsonFromPetBox(change.box_info()));
             }
         }
     };
@@ -471,6 +508,9 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
         return;
     case rwtd::ZoneOpcode::ZoneSceneEndThrowRsp:
         processRetInfoResponse<Next::ZoneSceneEndThrowRsp>(payload, processRetInfo);
+        return;
+    case rwtd::ZoneOpcode::ZoneTogetherCatchPetForGiftingRsp:
+        processRetInfoResponse<Next::ZoneTogetherCatchPetForGiftingRsp>(payload, processRetInfo);
         return;
     case rwtd::ZoneOpcode::ZoneUseMultiBagItemRsp: {
         Next::ZoneUseMultiBagItemRsp message;
