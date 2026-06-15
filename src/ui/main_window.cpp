@@ -1,6 +1,7 @@
 #include "main_window.h"
 
 #include "app_version.h"
+#include "traffic/name_decode_util.h"
 #include "ui/window_flags.h"
 
 #include <QDesktopServices>
@@ -78,7 +79,6 @@ MainWindow::MainWindow(const RuntimeContext &runtimeContext, QWidget *parent)
         m_database.resetMapMarkerVisibility();
         m_dataCenter.loadPersistentMarkers(m_database.queryMapMarkers());
     }
-    m_mapWindow->show();
     syncOpcodeProfiles();
     QTimer::singleShot(0, this, &MainWindow::toggleTraffic);
 }
@@ -534,8 +534,7 @@ void MainWindow::populateUserCombo()
                 continue;
             }
             const QString rawName = user.value(QStringLiteral("name")).toString();
-            const QByteArray decoded = QByteArray::fromBase64(rawName.toUtf8());
-            QString displayName = decoded.isEmpty() ? rawName : QString::fromUtf8(decoded);
+            QString displayName = decodeBytesName(rawName.toLatin1());
             if (displayName.isEmpty()) {
                 displayName = QString::number(uid);
             }

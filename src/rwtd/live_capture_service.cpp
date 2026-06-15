@@ -1,4 +1,5 @@
 #include "live_capture_service.h"
+#include "pcap_live_device_factory.h"
 
 #include "opcode_registry.h"
 #include "record_decoder.h"
@@ -33,8 +34,8 @@
 #include <Packet.h>
 #include <PcapFilter.h>
 #include <PcapLiveDevice.h>
-#include <PcapLiveDeviceList.h>
 #include <TcpReassembly.h>
+#include <pcap.h>
 
 namespace rwtd {
 namespace {
@@ -44,20 +45,33 @@ QString ipToString(const pcpp::IPAddress &ip)
     return QString::fromStdString(ip.toString());
 }
 
-QStringList ipv4Addresses(const pcpp::PcapLiveDevice *device)
+QStringList ipv4AddressesFromPcapAddrs(pcap_addr *addresses)
 {
     QStringList result;
-    if (device == nullptr) {
-        return result;
-    }
-
-    for (const auto &address : device->getIPAddresses()) {
-        if (!address.isIPv4() || address.isZero()) {
+    for (pcap_addr *current = addresses; current != nullptr; current = current->next) {
+        if (current->addr == nullptr || current->addr->sa_family != AF_INET) {
             continue;
         }
-        result.append(ipToString(address));
+        const auto *ipv4 = reinterpret_cast<const sockaddr_in *>(current->addr);
+        char buffer[INET_ADDRSTRLEN] = {};
+        if (inet_ntop(AF_INET, &ipv4->sin_addr, buffer, sizeof(buffer)) == nullptr) {
+            continue;
+        }
+        result.append(QString::fromUtf8(buffer));
     }
+    result.removeDuplicates();
     return result;
+}
+
+pcap_if_t *findPcapInterface(pcap_if_t *interfaces, const QString &deviceName)
+{
+    const QByteArray target = deviceName.toUtf8();
+    for (pcap_if_t *iface = interfaces; iface != nullptr; iface = iface->next) {
+        if (iface->name != nullptr && target == iface->name) {
+            return iface;
+        }
+    }
+    return nullptr;
 }
 
 QStringList qtInterfaceIpv4Addresses(const QString &interfaceName)
@@ -342,43 +356,34 @@ QHash<QString, QString> macOSInterfaceFriendlyNames()
 }
 #endif
 
-QString captureDeviceDisplayName(const pcpp::PcapLiveDevice *device, const QHash<QString, QString> &friendlyNames)
+QString captureDeviceDisplayName(const QString &deviceName, const QString &description,
+                                 const QHash<QString, QString> &friendlyNames)
 {
-    if (device == nullptr) {
-        return {};
-    }
-
-    const QString deviceName = QString::fromStdString(device->getName()).trimmed();
-    const QString description = QString::fromStdString(device->getDesc()).trimmed();
+    const QString trimmedName = deviceName.trimmed();
+    const QString trimmedDescription = description.trimmed();
 #if defined(Q_OS_WIN)
-    const QString friendlyName = windowsFriendlyNameForDevice(deviceName, friendlyNames);
+    const QString friendlyName = windowsFriendlyNameForDevice(trimmedName, friendlyNames);
     if (!friendlyName.isEmpty()) {
         return friendlyName;
     }
 #elif defined(__APPLE__)
-    const QString friendlyName = friendlyNames.value(deviceName);
+    const QString friendlyName = friendlyNames.value(trimmedName);
     if (!friendlyName.isEmpty()) {
         return friendlyName;
     }
 #endif
-    if (!description.isEmpty()) {
-        return description;
+    if (!trimmedDescription.isEmpty()) {
+        return trimmedDescription;
     }
-    return deviceName;
+    return trimmedName;
 }
 
-bool isDefaultRouteDevice(const pcpp::PcapLiveDevice *device, const QString &defaultInterface)
+bool isDefaultRouteInterface(const QString &deviceName, bool loopback, const QString &defaultInterface)
 {
-    if (device == nullptr || device->getLoopback()) {
+    if (loopback || defaultInterface.isEmpty()) {
         return false;
     }
-    if (device->getDefaultGateway() == pcpp::IPv4Address::Zero) {
-        return false;
-    }
-    if (!defaultInterface.isEmpty()) {
-        return device->getName() == defaultInterface.toStdString();
-    }
-    return true;
+    return deviceName == defaultInterface;
 }
 
 } // namespace
@@ -425,7 +430,13 @@ LiveCaptureService::~LiveCaptureService()
 QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
 {
     QList<CaptureDeviceInfo> result;
-    const auto &devices = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDevicesList();
+
+    char errbuf[PCAP_ERRBUF_SIZE] = {};
+    pcap_if_t *interfaces = nullptr;
+    if (pcap_findalldevs(&interfaces, errbuf) == -1) {
+        return result;
+    }
+
     const QString defaultInterface = defaultRouteInterfaceName();
 #if defined(Q_OS_WIN)
     const QHash<QString, QString> friendlyNames = windowsAdapterFriendlyNames();
@@ -435,23 +446,30 @@ QList<CaptureDeviceInfo> LiveCaptureService::availableDevices()
 #else
     const QHash<QString, QString> friendlyNames;
 #endif
-    for (const pcpp::PcapLiveDevice *device : devices) {
+
+    for (pcap_if_t *iface = interfaces; iface != nullptr; iface = iface->next) {
+        if (iface->name == nullptr) {
+            continue;
+        }
+
         CaptureDeviceInfo info;
-        info.name = QString::fromStdString(device->getName());
-        info.description = QString::fromStdString(device->getDesc());
-        info.displayName = captureDeviceDisplayName(device, friendlyNames);
+        info.name = QString::fromUtf8(iface->name);
+        info.description = iface->description != nullptr ? QString::fromUtf8(iface->description) : QString();
+        info.displayName = captureDeviceDisplayName(info.name, info.description, friendlyNames);
 #if defined(Q_OS_WIN)
         info.addresses = windowsIpv4AddressesForDevice(info.name, freshAddresses);
 #else
         info.addresses = qtInterfaceIpv4Addresses(info.name);
 #endif
         if (info.addresses.isEmpty()) {
-            info.addresses = ipv4Addresses(device);
+            info.addresses = ipv4AddressesFromPcapAddrs(iface->addresses);
         }
-        info.loopback = device->getLoopback();
-        info.isDefaultGateway = isDefaultRouteDevice(device, defaultInterface);
+        info.loopback = (iface->flags & PCAP_IF_LOOPBACK) != 0;
+        info.isDefaultGateway = isDefaultRouteInterface(info.name, info.loopback, defaultInterface);
         result.append(info);
     }
+
+    pcap_freealldevs(interfaces);
     return result;
 }
 
@@ -462,11 +480,36 @@ bool LiveCaptureService::start(const QString &deviceName, quint16 port)
         return true;
     }
 
-    m_device = pcpp::PcapLiveDeviceList::getInstance().getDeviceByName(deviceName.toStdString());
-    if (m_device == nullptr) {
+    char errbuf[PCAP_ERRBUF_SIZE] = {};
+    pcap_if_t *interfaces = nullptr;
+    if (pcap_findalldevs(&interfaces, errbuf) == -1) {
+        emit errorOccurred(QStringLiteral("枚举网卡失败: %1").arg(QString::fromUtf8(errbuf)));
+        return false;
+    }
+
+    pcap_if_t *iface = findPcapInterface(interfaces, deviceName);
+    if (iface == nullptr) {
+        pcap_freealldevs(interfaces);
         emit errorOccurred(QStringLiteral("找不到网卡: %1").arg(deviceName));
         return false;
     }
+
+    try {
+        m_ownedDevice = rwtd::createLiveDevice(iface, true, true, false);
+    } catch (const std::exception &e) {
+        try {
+            m_ownedDevice = rwtd::createLiveDevice(iface, false, false, false);
+        } catch (const std::exception &fallbackError) {
+            pcap_freealldevs(interfaces);
+            emit errorOccurred(QStringLiteral("初始化网卡失败: %1 (%2)")
+                                   .arg(deviceName, QString::fromUtf8(fallbackError.what())));
+            return false;
+        }
+        (void)e;
+    }
+    pcap_freealldevs(interfaces);
+
+    m_device = m_ownedDevice.get();
 
     pcpp::PcapLiveDevice::DeviceConfiguration config(
         pcpp::PcapLiveDevice::Promiscuous,
@@ -475,6 +518,7 @@ bool LiveCaptureService::start(const QString &deviceName, quint16 port)
         pcpp::PcapLiveDevice::PCPP_INOUT);
     if (!m_device->open(config)) {
         emit errorOccurred(QStringLiteral("打开网卡失败，可能需要抓包权限: %1").arg(deviceName));
+        m_ownedDevice.reset();
         m_device = nullptr;
         return false;
     }
@@ -483,6 +527,7 @@ bool LiveCaptureService::start(const QString &deviceName, quint16 port)
     if (!m_device->setFilter(portFilter)) {
         emit errorOccurred(QStringLiteral("设置抓包过滤器失败: tcp port %1").arg(port));
         m_device->close();
+        m_ownedDevice.reset();
         m_device = nullptr;
         return false;
     }
@@ -498,6 +543,7 @@ bool LiveCaptureService::start(const QString &deviceName, quint16 port)
         emit errorOccurred(QStringLiteral("启动抓包失败: %1").arg(deviceName));
         m_reassembly.reset();
         m_device->close();
+        m_ownedDevice.reset();
         m_device = nullptr;
         return false;
     }
@@ -523,6 +569,7 @@ void LiveCaptureService::stop()
     }
     if (m_device != nullptr) {
         m_device->close();
+        m_ownedDevice.reset();
         m_device = nullptr;
     }
     m_running = false;

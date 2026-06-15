@@ -61,6 +61,7 @@ private:
     void rememberFlowKey(const QString &flowId, const QByteArray &key);
 
     mutable QMutex m_mutex;
+    std::unique_ptr<pcpp::PcapLiveDevice> m_ownedDevice;
     pcpp::PcapLiveDevice *m_device = nullptr;
     std::unique_ptr<pcpp::TcpReassembly> m_reassembly;
     quint16 m_port = DefaultPort;

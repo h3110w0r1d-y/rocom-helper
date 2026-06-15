@@ -1,6 +1,7 @@
 #include "traffic_event_mapper.h"
 
 #include "storage/database_service.h"
+#include "traffic/name_decode_util.h"
 #include "traffic/protobuf_json_util.h"
 
 #include <QByteArray>
@@ -89,12 +90,7 @@ QString decodedPetName(const Next::PetData &petData)
     if (!petData.has_name()) {
         return {};
     }
-    const QString rawName = QString::fromStdString(petData.name());
-    const QByteArray decoded = QByteArray::fromBase64(rawName.toUtf8());
-    if (!decoded.isEmpty()) {
-        return QString::fromUtf8(decoded);
-    }
-    return rawName;
+    return decodeBytesName(petData.name());
 }
 
 CatchRecord catchRecordFromPetData(const Next::PetData &petData)
@@ -511,7 +507,7 @@ void TrafficEventMapper::mapDecodedAction(const rwtd::DecodedAction &action)
             const Next::PlayerBriefInfo &briefInfo = playerInfo.brief_info();
             const quint64 uin = briefInfo.has_uin() ? briefInfo.uin() : 0;
             const QString nameBase64 = briefInfo.has_name()
-                ? QString::fromStdString(briefInfo.name())
+                ? QString::fromLatin1(briefInfo.name().data(), static_cast<int>(briefInfo.name().size()))
                 : QString();
             quint32 avatar = 0;
             if (briefInfo.has_additional_data() && briefInfo.additional_data().has_card_brief_info()

@@ -117,10 +117,12 @@ if(MINGW)
     target_compile_options(roco_helper PRIVATE -Wa,-mbig-obj)
 endif()
 
-# 仅 Release 启用的链接体积优化。
+# 仅 Release 启用的链接体积优化：dead_strip 去掉未引用代码，-x/-S 剥离符号表。
 if(APPLE)
     target_link_options(roco_helper PRIVATE
             $<$<CONFIG:Release>:-Wl,-dead_strip>
+            $<$<CONFIG:Release>:-Wl,-x>
+            $<$<CONFIG:Release>:-Wl,-S>
     )
 elseif(WIN32)
     if(MINGW)
