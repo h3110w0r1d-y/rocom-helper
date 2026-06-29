@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.27)
 
 project(roco_helper_plugin VERSION 3.2.0 LANGUAGES CXX)
 
+# ---------------------------------------------------------------------------
+# Toolchain / platform defaults
+# ---------------------------------------------------------------------------
+add_link_options("-fuse-ld=lld")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/mingw_static.cmake")
+roco_setup_mingw_static_linking()
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/release_optimizations.cmake")
+
 set(ROCO_APP_VERSION "3.2.0")
 if(PROJECT_VERSION_PATCH STREQUAL "")
     set(ROCO_APP_VERSION_PATCH 0)
@@ -105,29 +114,6 @@ if(WIN32)
 endif()
 
 target_compile_features(roco_helper_plugin PRIVATE cxx_std_17)
-
-if(MINGW)
-    target_compile_options(roco_helper_plugin PRIVATE -Wa,-mbig-obj)
-endif()
-
-# 仅 Release 启用的链接体积优化：dead_strip 去掉未引用代码，-x/-S 剥离符号表。
-if(APPLE)
-    target_link_options(roco_helper_plugin PRIVATE
-            $<$<CONFIG:Release>:-Wl,-dead_strip>
-            $<$<CONFIG:Release>:-Wl,-x>
-            $<$<CONFIG:Release>:-Wl,-S>
-    )
-elseif(WIN32)
-    if(MINGW)
-        target_link_options(roco_helper_plugin PRIVATE
-                -static
-                -static-libgcc
-                -static-libstdc++
-                $<$<CONFIG:Release>:-Wl,--gc-sections>
-                $<$<CONFIG:Release>:-s>
-        )
-    endif()
-endif()
 
 # Windows 直接把可执行文件生成到 dist，CLion 运行 roco_helper_plugin target 时也会启动这里的 exe。
 if(WIN32)
