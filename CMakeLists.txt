@@ -66,10 +66,20 @@ set_target_properties(roco_helper_plugin PROPERTIES
 
 if(APPLE)
     set_target_properties(roco_helper_plugin PROPERTIES
+            OUTPUT_NAME "roco_helper_plugin"
             MACOSX_BUNDLE_BUNDLE_NAME "洛克助手插件"
             MACOSX_BUNDLE_GUI_IDENTIFIER "com.h3110w0r1d.roco_helper_plugin"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${ROCO_APP_VERSION}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${ROCO_APP_VERSION}"
+    )
+    set(ROCO_MACOS_ZIP "${CMAKE_BINARY_DIR}/roco_helper_plugin.app-v${ROCO_APP_VERSION}.zip")
+    add_custom_command(TARGET roco_helper_plugin POST_BUILD
+            COMMAND /usr/bin/ditto -c -k --keepParent "$<TARGET_BUNDLE_DIR:roco_helper_plugin>" "${ROCO_MACOS_ZIP}"
+            VERBATIM
+    )
+elseif(WIN32)
+    set_target_properties(roco_helper_plugin PROPERTIES
+            OUTPUT_NAME "roco_helper_plugin-v${ROCO_APP_VERSION}"
     )
 endif()
 
