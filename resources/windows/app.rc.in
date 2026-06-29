@@ -19,12 +19,12 @@ BEGIN
     BEGIN
         BLOCK "080404b0"
         BEGIN
-            VALUE "CompanyName", "Roco Helper"
-            VALUE "FileDescription", "洛克助手"
+            VALUE "CompanyName", "Roco Helper Plugin"
+            VALUE "FileDescription", "洛克助手插件"
             VALUE "FileVersion", "@ROCO_APP_VERSION@"
-            VALUE "InternalName", "roco_helper"
-            VALUE "OriginalFilename", "roco_helper.exe"
-            VALUE "ProductName", "洛克助手"
+            VALUE "InternalName", "roco_helper_plugin"
+            VALUE "OriginalFilename", "roco_helper_plugin.exe"
+            VALUE "ProductName", "洛克助手插件"
             VALUE "ProductVersion", "@ROCO_APP_VERSION@"
         END
     END

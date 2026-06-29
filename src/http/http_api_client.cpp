@@ -1,0 +1,350 @@
+#include "http_api_client.h"
+
+#include "data/map_types.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrlQuery>
+#include <QtMath>
+
+namespace app {
+namespace {
+
+int intValue(const QJsonObject &object, const QString &key, int defaultValue = 0)
+{
+    const QJsonValue value = object.value(key);
+    if (value.isDouble()) {
+        return qRound(value.toDouble());
+    }
+    if (value.isString()) {
+        bool ok = false;
+        const double number = value.toString().toDouble(&ok);
+        return ok ? qRound(number) : defaultValue;
+    }
+    return defaultValue;
+}
+
+double doubleValue(const QJsonObject &object, const QString &key, double defaultValue = 0.0)
+{
+    const QJsonValue value = object.value(key);
+    if (value.isDouble()) {
+        return value.toDouble();
+    }
+    if (value.isString()) {
+        bool ok = false;
+        const double number = value.toString().toDouble(&ok);
+        return ok ? number : defaultValue;
+    }
+    return defaultValue;
+}
+
+bool boolValue(const QJsonObject &object, const QString &key, bool defaultValue = false)
+{
+    const QJsonValue value = object.value(key);
+    if (value.isBool()) {
+        return value.toBool();
+    }
+    if (value.isDouble()) {
+        return !qFuzzyIsNull(value.toDouble());
+    }
+    if (value.isString()) {
+        const QString text = value.toString().trimmed().toLower();
+        if (text == QStringLiteral("true") || text == QStringLiteral("1")) {
+            return true;
+        }
+        if (text == QStringLiteral("false") || text == QStringLiteral("0")) {
+            return false;
+        }
+    }
+    return defaultValue;
+}
+
+} // namespace
+
+HttpApiClient::HttpApiClient(QObject *parent)
+    : QObject(parent)
+{
+    m_reconnectTimer.setSingleShot(true);
+    m_reconnectTimer.setInterval(3000);
+    connect(&m_reconnectTimer, &QTimer::timeout, this, &HttpApiClient::openMapEvents);
+}
+
+HttpApiClient::~HttpApiClient()
+{
+    stop();
+}
+
+void HttpApiClient::setEndpoint(const QString &host, int port, quint64 uid)
+{
+    m_host = normalizeHost(host);
+    m_port = clampPort(port);
+    m_uid = uid;
+}
+
+void HttpApiClient::start()
+{
+    if (m_running) {
+        return;
+    }
+    m_running = true;
+    emit statusChanged(QStringLiteral("正在连接 %1:%2").arg(m_host).arg(m_port));
+    fetchInitialMapPosition();
+    openMapEvents();
+}
+
+void HttpApiClient::stop()
+{
+    m_running = false;
+    m_reconnectTimer.stop();
+    closeMapEvents();
+    emit statusChanged(QStringLiteral("未连接"));
+}
+
+void HttpApiClient::restart()
+{
+    const bool wasRunning = m_running;
+    stop();
+    if (wasRunning) {
+        start();
+    }
+}
+
+bool HttpApiClient::isRunning() const
+{
+    return m_running;
+}
+
+QString HttpApiClient::host() const
+{
+    return m_host;
+}
+
+int HttpApiClient::port() const
+{
+    return m_port;
+}
+
+quint64 HttpApiClient::uid() const
+{
+    return m_uid;
+}
+
+QUrl HttpApiClient::apiUrl(const QString &path, bool includeUid) const
+{
+    QUrl url;
+    url.setScheme(QStringLiteral("http"));
+    url.setHost(m_host);
+    url.setPort(m_port);
+    url.setPath(path);
+    if (includeUid) {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("uid"), QString::number(m_uid));
+        url.setQuery(query);
+    }
+    return url;
+}
+
+void HttpApiClient::fetchInitialMapPosition()
+{
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/memory/map.player_position_changed"), true));
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleMemoryReply(reply);
+    });
+}
+
+void HttpApiClient::openMapEvents()
+{
+    if (!m_running || m_sseReply != nullptr) {
+        return;
+    }
+
+    m_lineBuffer.clear();
+    m_currentEvent.clear();
+    m_currentData.clear();
+
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/events/map"), true));
+    request.setRawHeader("Accept", "text/event-stream");
+    request.setRawHeader("Cache-Control", "no-cache");
+
+    m_sseReply = m_network.get(request);
+    connect(m_sseReply, &QNetworkReply::readyRead, this, &HttpApiClient::handleSseBytes);
+    connect(m_sseReply, &QNetworkReply::finished, this, [this] {
+        if (m_sseReply == nullptr) {
+            return;
+        }
+        const QString errorText = m_sseReply->error() == QNetworkReply::NoError
+            ? QString()
+            : m_sseReply->errorString();
+        closeMapEvents();
+        if (m_running) {
+            if (!errorText.isEmpty()) {
+                emit errorOccurred(QStringLiteral("SSE 连接断开: %1").arg(errorText));
+            }
+            scheduleReconnect();
+        }
+    });
+}
+
+void HttpApiClient::closeMapEvents()
+{
+    if (m_sseReply == nullptr) {
+        return;
+    }
+    QNetworkReply *reply = m_sseReply;
+    m_sseReply = nullptr;
+    reply->disconnect(this);
+    reply->abort();
+    reply->deleteLater();
+}
+
+void HttpApiClient::scheduleReconnect()
+{
+    if (!m_running) {
+        return;
+    }
+    emit statusChanged(QStringLiteral("连接断开，准备重连"));
+    m_reconnectTimer.start();
+}
+
+void HttpApiClient::handleMemoryReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    if (!m_running) {
+        return;
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit errorOccurred(QStringLiteral("读取地图快照失败: %1").arg(reply->errorString()));
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (!doc.isObject()) {
+        return;
+    }
+    const QJsonObject latest = doc.object().value(QStringLiteral("latest")).toObject();
+    if (!latest.isEmpty()) {
+        publishPlayerPosition(latest);
+    }
+}
+
+void HttpApiClient::handleSseBytes()
+{
+    if (m_sseReply == nullptr) {
+        return;
+    }
+    m_lineBuffer.append(m_sseReply->readAll());
+    int newline = -1;
+    while ((newline = m_lineBuffer.indexOf('\n')) >= 0) {
+        QByteArray line = m_lineBuffer.left(newline);
+        m_lineBuffer.remove(0, newline + 1);
+        if (line.endsWith('\r')) {
+            line.chop(1);
+        }
+        processSseLine(line);
+    }
+}
+
+void HttpApiClient::processSseLine(const QByteArray &line)
+{
+    if (line.isEmpty()) {
+        flushSseEvent();
+        return;
+    }
+    if (line.startsWith(':')) {
+        return;
+    }
+    if (line.startsWith("event:")) {
+        m_currentEvent = QString::fromUtf8(line.mid(6).trimmed());
+        return;
+    }
+    if (line.startsWith("data:")) {
+        QByteArray data = line.mid(5);
+        if (data.startsWith(' ')) {
+            data.remove(0, 1);
+        }
+        if (!m_currentData.isEmpty()) {
+            m_currentData.append('\n');
+        }
+        m_currentData.append(data);
+    }
+}
+
+void HttpApiClient::flushSseEvent()
+{
+    const QString eventName = m_currentEvent.isEmpty() ? QStringLiteral("message") : m_currentEvent;
+    const QByteArray data = m_currentData;
+    m_currentEvent.clear();
+    m_currentData.clear();
+    if (!data.isEmpty()) {
+        handleSseEvent(eventName, data);
+    }
+}
+
+void HttpApiClient::handleSseEvent(const QString &eventName, const QByteArray &data)
+{
+    if (eventName == QStringLiteral("ready")) {
+        emit statusChanged(QStringLiteral("已连接 %1:%2").arg(m_host).arg(m_port));
+        return;
+    }
+    if (eventName != eventTypeName(EventType::PlayerPositionChanged)) {
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isObject()) {
+        emit errorOccurred(QStringLiteral("地图事件 JSON 无效"));
+        return;
+    }
+    publishPlayerPosition(doc.object());
+}
+
+void HttpApiClient::publishPlayerPosition(const QJsonObject &payload)
+{
+    PlayerPositionPayload position;
+    position.visible = boolValue(payload, QStringLiteral("visible"), true);
+    position.rotation = doubleValue(payload, QStringLiteral("rotation"));
+    position.ctrlRotation = doubleValue(payload, QStringLiteral("ctrl_rotation"));
+    position.gameX = intValue(payload, QStringLiteral("game_x"));
+    position.gameY = intValue(payload, QStringLiteral("game_y"));
+    position.gameZ = intValue(payload, QStringLiteral("game_z"));
+
+    AppEvent event = makePlayerPositionChangedEvent(EventSource::Http, EventFlag::UpdateUi, position);
+    event.uid = m_uid;
+    event.payload = payload;
+    emit eventCreated(event);
+}
+
+QString HttpApiClient::normalizeHost(QString host)
+{
+    host = host.trimmed();
+    if (host.startsWith(QStringLiteral("http://"))) {
+        host.remove(0, 7);
+    } else if (host.startsWith(QStringLiteral("https://"))) {
+        host.remove(0, 8);
+    }
+    const int slash = host.indexOf(QLatin1Char('/'));
+    if (slash >= 0) {
+        host = host.left(slash);
+    }
+    const int colon = host.indexOf(QLatin1Char(':'));
+    if (colon >= 0) {
+        host = host.left(colon);
+    }
+    return host.isEmpty() ? QStringLiteral("127.0.0.1") : host;
+}
+
+int HttpApiClient::clampPort(int port)
+{
+    if (port < MinHttpPort || port > MaxHttpPort) {
+        return DefaultHttpPort;
+    }
+    return port;
+}
+
+} // namespace app

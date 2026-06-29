@@ -13,7 +13,6 @@ namespace app {
 
 enum class EventType {
     Unknown,
-    RawTrafficDecoded,
     PlayerPositionChanged,
     MapMarkerAdded,
     MapMarkerMoved,
@@ -21,29 +20,16 @@ enum class EventType {
     MapMarkerDeleted,
     MapMarkerVisibilityChanged,
     MapMarkerTypeVisibilityChanged,
-    CatchRecordAdded,
-    ShinyPetDetected,
-    BoxHintUpdated,
-    EggTimeUpdated,
-    PetInfoReload,
-    PetInfoChanged,
-    PetInfoDeleted,
-    BoxInfoReload,
-    BoxInfoChanged,
-    BoxInfoBoxReplaced,
 };
 
 enum class EventSource {
     Unknown,
-    Traffic,
     Http,
     Ui,
 };
 
 enum EventFlag {
-    Persist = 0x01,
-    UpdateUi = 0x02,
-    PushSse = 0x04,
+    UpdateUi = 0x01,
 };
 Q_DECLARE_FLAGS(EventFlags, EventFlag)
 
@@ -56,14 +42,11 @@ struct AppEvent {
     QString name;
     QJsonObject payload;
     std::optional<PlayerPositionPayload> playerPosition;
-    std::optional<CatchRecord> catchRecord;
 };
 
 inline QString eventTypeName(EventType type)
 {
     switch (type) {
-    case EventType::RawTrafficDecoded:
-        return QStringLiteral("traffic.raw_decoded");
     case EventType::PlayerPositionChanged:
         return QStringLiteral("map.player_position_changed");
     case EventType::MapMarkerAdded:
@@ -78,26 +61,6 @@ inline QString eventTypeName(EventType type)
         return QStringLiteral("map.marker_visibility_changed");
     case EventType::MapMarkerTypeVisibilityChanged:
         return QStringLiteral("map.marker_type_visibility_changed");
-    case EventType::CatchRecordAdded:
-        return QStringLiteral("catch.record_added");
-    case EventType::ShinyPetDetected:
-        return QStringLiteral("catch.shiny_pet_detected");
-    case EventType::BoxHintUpdated:
-        return QStringLiteral("box.hint_updated");
-    case EventType::EggTimeUpdated:
-        return QStringLiteral("egg_time.updated");
-    case EventType::PetInfoReload:
-        return QStringLiteral("pet_info.reload");
-    case EventType::PetInfoChanged:
-        return QStringLiteral("pet_info.changed");
-    case EventType::PetInfoDeleted:
-        return QStringLiteral("pet_info.deleted");
-    case EventType::BoxInfoReload:
-        return QStringLiteral("box.reload");
-    case EventType::BoxInfoChanged:
-        return QStringLiteral("box.changed");
-    case EventType::BoxInfoBoxReplaced:
-        return QStringLiteral("box.replaced");
     case EventType::Unknown:
         break;
     }
@@ -107,8 +70,6 @@ inline QString eventTypeName(EventType type)
 inline QString eventSourceName(EventSource source)
 {
     switch (source) {
-    case EventSource::Traffic:
-        return QStringLiteral("traffic");
     case EventSource::Http:
         return QStringLiteral("http");
     case EventSource::Ui:
@@ -134,43 +95,9 @@ inline AppEvent makePlayerPositionChangedEvent(
     return event;
 }
 
-inline QJsonObject catchRecordToJson(const CatchRecord &record)
-{
-    return {
-        {QStringLiteral("name"), record.name},
-        {QStringLiteral("nature"), record.nature},
-        {QStringLiteral("talent_rank"), record.talentRank},
-        {QStringLiteral("speciality_id"), record.specialityId},
-        {QStringLiteral("wear_medal_conf_id"), record.wearMedalConfId},
-        {QStringLiteral("voice"), record.voice},
-        {QStringLiteral("weight"), record.weight},
-        {QStringLiteral("base_conf_id"), record.baseConfId},
-        {QStringLiteral("caught_at"), record.caughtAt},
-    };
-}
-
-inline AppEvent makeCatchRecordAddedEvent(
-    EventSource source,
-    EventFlags flags,
-    const CatchRecord &record)
-{
-    AppEvent event;
-    event.type = EventType::CatchRecordAdded;
-    event.source = source;
-    event.flags = flags;
-    event.occurredAt = QDateTime::currentDateTimeUtc();
-    event.name = eventTypeName(EventType::CatchRecordAdded);
-    event.catchRecord = record;
-    return event;
-}
-
 inline QJsonObject appEventToJson(const AppEvent &event)
 {
     QJsonObject payload = event.payload;
-    if (event.type == EventType::CatchRecordAdded && event.catchRecord.has_value()) {
-        payload = catchRecordToJson(*event.catchRecord);
-    }
-
     return {
         {QStringLiteral("type"), eventTypeName(event.type)},
         {QStringLiteral("source"), eventSourceName(event.source)},

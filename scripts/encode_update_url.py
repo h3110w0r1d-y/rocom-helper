@@ -31,7 +31,7 @@ FUNC_PATTERN = re.compile(
 )
 
 CMAKE_PROJECT_PATTERN = re.compile(
-    r"(project\(roco_helper VERSION )\d+\.\d+( LANGUAGES CXX\))",
+    r"(project\(roco_helper_plugin VERSION )\d+\.\d+( LANGUAGES CXX\))",
 )
 
 
@@ -70,7 +70,7 @@ def patch_cmake_lists(content: str, version: str) -> str:
     match = CMAKE_PROJECT_PATTERN.search(content)
     if match is None:
         raise RuntimeError(
-            "project(roco_helper VERSION ... LANGUAGES CXX) not found in CMakeLists.txt"
+            "project(roco_helper_plugin VERSION ... LANGUAGES CXX) not found in CMakeLists.txt"
         )
 
     new_line = f"{match.group(1)}{version}{match.group(2)}"

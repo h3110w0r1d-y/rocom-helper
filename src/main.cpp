@@ -8,16 +8,16 @@
 #include <QLabel>
 #include <QLockFile>
 #include <QMessageBox>
-#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QStandardPaths>
 #include <QTimer>
 
 #include <algorithm>
-#include <cstdint>
 #include <iterator>
 #include <vector>
+
+#include "data/runtime_context.h"
 
 namespace {
 
@@ -403,10 +403,10 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setWindowIcon(QIcon(QStringLiteral(":/app.png")));
-    QCoreApplication::setApplicationName(QStringLiteral("roco_helper"));
+    QCoreApplication::setApplicationName(QStringLiteral("roco_helper_plugin"));
     QCoreApplication::setApplicationVersion(app::appVersionString());
 
-    SingleInstanceGuard instanceGuard(QStringLiteral("roco_helper.lock"));
+    SingleInstanceGuard instanceGuard(QStringLiteral("roco_helper_plugin.lock"));
     if (!instanceGuard.acquire()) {
         QMessageBox::warning(nullptr,
                              app::appWindowTitle(),
@@ -433,7 +433,7 @@ int main(int argc, char *argv[])
         QMessageBox::information(nullptr, app::appWindowTitle(), disclaimer);
     }
 
-    app::MainWindow window(checkResult.context);
+    app::MainWindow window;
     window.show();
     return app.exec();
 }

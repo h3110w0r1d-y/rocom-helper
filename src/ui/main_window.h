@@ -2,21 +2,14 @@
 
 #include "data/data_center.h"
 #include "events/event_dispatcher.h"
-#include "http/http_server_service.h"
-#include "http/sse_broadcaster.h"
-#include "rwtd/live_capture_service.h"
-#include "rwtd/opcode_filter.h"
-#include "storage/database_service.h"
-#include "traffic/traffic_event_mapper.h"
-#include "ui/catch/box_hint_window.h"
-#include "ui/catch/catch_window.h"
-#include "ui/catch/egg_time_window.h"
+#include "http/http_api_client.h"
 #include "ui/marker_filter_panel.h"
 #include "ui/map/map_window.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
@@ -29,7 +22,7 @@ class MainWindow : public QWidget {
     Q_OBJECT
 
 public:
-    explicit MainWindow(const RuntimeContext &runtimeContext = RuntimeContext(), QWidget *parent = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
 protected:
@@ -39,57 +32,40 @@ protected:
 private:
     void buildUi();
     void connectSignals();
-    void initializeServices();
-    void populateDevices();
-    void toggleTraffic();
-    void onTrafficError(const QString &message);
+    void connectToServer();
+    void disconnectFromServer();
+    void applyServerEndpoint(bool restartClient);
     void showMap();
-    void showCatch();
-    void showBoxHint();
-    void showEggTime();
-    void openPetFilter();
-    void applyHttpPort();
+    void showPendingFeature();
     void importPathOverlay();
     QStringList extractSvgPaths(const QString &filePath) const;
     void onBaseStateLoaded(const BaseState &state);
     void onMapStateLoaded(const MapState &state);
     void populateMapCombo(const QString &currentMapId = {});
     void populateLayerCombo(const QString &mapId, const QString &currentLayerId = {});
-    void populateUserCombo();
     void selectMapFromCombo();
     void selectLayerFromCombo();
-    void selectUserFromCombo();
+    quint64 selectedUid() const;
     void onMapChanged(const QString &mapId);
     void onLayerChanged(const QString &layerId);
     void renderMarkerTypeControls(const MarkerTypeMap &markerTypes);
-    void showShinyAlert(const QJsonObject &payload);
-    void forgetAlert(QMessageBox *dialog);
-    void syncOpcodeProfiles();
 
     DataCenter m_dataCenter;
     MapWindow *m_mapWindow = nullptr;
-    CatchWindow *m_catchWindow = nullptr;
-    BoxHintWindow *m_boxHintWindow = nullptr;
-    EggTimeWindow *m_eggTimeWindow = nullptr;
-    rwtd::OpcodeFilter m_opcodeFilter;
-    rwtd::LiveCaptureService m_capture;
     EventDispatcher m_eventDispatcher;
-    TrafficEventMapper m_trafficEventMapper;
-    DatabaseService m_database;
-    SseBroadcaster m_sseBroadcaster;
-    HttpServerService m_httpServer{&m_database, &m_dataCenter};
+    HttpApiClient m_apiClient;
 
-    QComboBox *m_ifaceCombo = nullptr;
-    QPushButton *m_refreshIfacesButton = nullptr;
-    QPushButton *m_trafficButton = nullptr;
+    QLineEdit *m_httpHostEdit = nullptr;
+    QSpinBox *m_httpPortSpin = nullptr;
+    QLineEdit *m_uidEdit = nullptr;
+    QPushButton *m_connectButton = nullptr;
+    QPushButton *m_disconnectButton = nullptr;
     QLabel *m_statusLabel = nullptr;
     QPushButton *m_showMapButton = nullptr;
     QCheckBox *m_topCheckbox = nullptr;
     QCheckBox *m_miniMapCheckbox = nullptr;
-    QComboBox *m_userCombo = nullptr;
     QComboBox *m_mapCombo = nullptr;
     QComboBox *m_layerCombo = nullptr;
-    QCheckBox *m_playerPositionLogCheckbox = nullptr;
     QCheckBox *m_trailCheckbox = nullptr;
     QSpinBox *m_trailWidthSpin = nullptr;
     QPushButton *m_clearTrailButton = nullptr;
@@ -98,13 +74,10 @@ private:
     QPushButton *m_clearPathButton = nullptr;
     MarkerFilterPanel *m_markerFilterPanel = nullptr;
     QPushButton *m_petFilterButton = nullptr;
-    QSpinBox *m_httpPortSpin = nullptr;
-    QPushButton *m_applyHttpPortButton = nullptr;
     QPushButton *m_showBoxHintButton = nullptr;
     QPushButton *m_showCatchButton = nullptr;
     QPushButton *m_showEggTimeButton = nullptr;
     QTimer m_saveTimer;
-    QList<QMessageBox *> m_alertWindows;
 };
 
 } // namespace app

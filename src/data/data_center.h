@@ -3,9 +3,7 @@
 #include "events/app_event.h"
 #include "map_catalog.h"
 #include "map_types.h"
-#include "runtime_context.h"
 
-#include <QJsonArray>
 #include <QFile>
 #include <QObject>
 #include <QTimer>
@@ -20,7 +18,6 @@ public:
     ~DataCenter() override;
 
     void load();
-    void loadPersistentMarkers(const QJsonArray &rows);
     void save();
     void saveIfDirty();
     void close();
@@ -30,15 +27,14 @@ public:
 
     BaseState baseSnapshot() const;
     MapState snapshot() const;
-    CatchState catchSnapshot() const;
-    const RuntimeContext &runtimeContext() const;
 
+    void setHttpHost(const QString &host);
     void setHttpPort(int port);
+    void setHttpEndpoint(const QString &host, int port);
 
     QList<QPair<QString, QString>> mapOptions() const;
     QVector<MapLayerConfig> layersForMap(const QString &mapId = {}) const;
 
-    void setRuntimeContext(const RuntimeContext &context);
     void setFollowPlayerMap(bool enabled);
     void setSelectedUid(quint64 uid);
     void setCurrentMap(const QString &mapId);
@@ -86,8 +82,6 @@ public slots:
 signals:
     void baseStateLoaded(const app::BaseState &state);
     void baseStateChanged(const app::BaseState &state);
-    void catchStateChanged(const app::CatchState &state);
-    void catchRecordAdded(const app::CatchRecord &record);
     void stateLoaded(const app::MapState &state);
     void playerChanged(const app::PlayerState &player);
     void markerAdded(const app::MapMarker &marker);
@@ -98,9 +92,6 @@ signals:
     void markerTypesChanged(const app::MarkerTypeMap &markerTypes);
     void mapChanged(const QString &mapId);
     void layerChanged(const QString &layerId);
-    void shinyPetDetected(const QJsonObject &payload);
-    void boxHintUpdated(const QJsonObject &payload);
-    void eggTimeUpdated(const QJsonObject &payload);
 
 private:
     MapState emptyMapState() const;
@@ -113,7 +104,6 @@ private:
     bool resolveLocation(int gameX, int gameY, int gameZ, MapLocation *outLocation) const;
     bool syncMarkerSubtypes();
     void applyMarkerEvent(const AppEvent &event);
-    void applyCatchRecord(const CatchRecord &record);
     static int intValue(const QJsonObject &object, const QString &key, int defaultValue = 0);
     static bool boolValue(const QJsonObject &object, const QString &key, bool defaultValue = false);
 
@@ -121,8 +111,6 @@ private:
     MapResolver m_resolver;
     BaseState m_baseState;
     MapState m_mapState;
-    CatchState m_catchState;
-    RuntimeContext m_runtimeContext;
     bool m_baseDirty = false;
     bool m_followPlayerMap = true;
     quint64 m_selectedUid = 0;

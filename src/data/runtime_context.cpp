@@ -1,7 +1,5 @@
 #include "runtime_context.h"
 
-#include "map_types.h"
-
 #include <QCryptographicHash>
 
 #include <cstddef>
@@ -14,22 +12,6 @@ QByteArray deriveKey(const QByteArray &seed, const char *purpose)
     QByteArray input = seed;
     input.append(purpose);
     return QCryptographicHash::hash(input, QCryptographicHash::Sha256);
-}
-
-template <size_t Size>
-QString decodeRuntimeText(const unsigned char (&encoded)[Size], const QByteArray &key)
-{
-    if (key.isEmpty()) {
-        return {};
-    }
-
-    QByteArray decoded;
-    decoded.reserve(static_cast<qsizetype>(Size));
-    for (size_t i = 0; i < Size; ++i) {
-        const auto keyByte = static_cast<unsigned char>(key.at(static_cast<qsizetype>(i % static_cast<size_t>(key.size()))));
-        decoded.append(static_cast<char>(encoded[i] ^ keyByte));
-    }
-    return QString::fromLatin1(decoded);
 }
 
 template <size_t Size>
@@ -48,45 +30,11 @@ QString decodeRuntimeTextUtf8(const unsigned char (&encoded)[Size], const QByteA
     return QString::fromUtf8(decoded);
 }
 
-int clampHttpPort(int port)
-{
-    if (port < MinHttpPort || port > MaxHttpPort) {
-        return DefaultHttpPort;
-    }
-    return port;
-}
-
 } // namespace
 
 bool RuntimeContext::isValid() const
 {
-    return seed.size() >= 16
-        && resourceKey.size() == 32
-        && trafficKey.size() == 32;
-}
-
-QString RuntimeContext::webResourceRoot() const
-{
-    static constexpr unsigned char data[] = {
-        0x6B, 0xFC, 0x60, 0xF6, 0xDA,
-    };
-    return isValid() ? decodeRuntimeText(data, resourceKey) : QString();
-}
-
-QString RuntimeContext::webIndexPath() const
-{
-    static constexpr unsigned char data[] = {
-        0x7E, 0xBA, 0x79, 0xF7, 0xDD, 0x40, 0x35, 0x86, 0xE2, 0xF3, 0x92,
-    };
-    return isValid() ? decodeRuntimeText(data, resourceKey) : QString();
-}
-
-QString RuntimeContext::trafficSchemaRoot() const
-{
-    static constexpr unsigned char data[] = {
-        0xA6, 0x0F, 0xB4, 0x84, 0x4F, 0x37,
-    };
-    return isValid() ? decodeRuntimeText(data, trafficKey) : QString();
+    return seed.size() >= 16;
 }
 
 QString RuntimeContext::startupDisclaimer() const
@@ -114,14 +62,7 @@ RuntimeContext makeRuntimeContext(const QByteArray &seed)
         return context;
     }
     context.seed = seed;
-    context.resourceKey = deriveKey(seed, "web-resource");
-    context.trafficKey = deriveKey(seed, "traffic");
     return context;
-}
-
-QString localPetFilterUrl(int port)
-{
-    return QStringLiteral("http://127.0.0.1:%1/").arg(clampHttpPort(port));
 }
 
 } // namespace app

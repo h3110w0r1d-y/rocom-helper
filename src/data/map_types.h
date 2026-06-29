@@ -165,28 +165,14 @@ struct MapState {
     MarkerMap temporaryMarkers;
 };
 
-struct CatchRecord {
-    QString name;
-    int nature = 0;
-    int talentRank = 1;
-    int specialityId = 0;
-    int wearMedalConfId = 0;
-    int voice = 0;
-    int weight = 0;
-    int baseConfId = 0;
-    QString caughtAt;
-};
-
-struct CatchState {
-    QVector<CatchRecord> records;
-};
-
 constexpr int DefaultHttpPort = 4939;
+constexpr const char *DefaultHttpHost = "127.0.0.1";
 constexpr int MinHttpPort = 1024;
 constexpr int MaxHttpPort = 65535;
 
 struct BaseState {
     int version = 1;
+    QString httpHost = QString::fromLatin1(DefaultHttpHost);
     int httpPort = DefaultHttpPort;
 };
 
@@ -215,6 +201,4 @@ Q_DECLARE_METATYPE(app::MarkerTypeMap)
 Q_DECLARE_METATYPE(app::MapMarker)
 Q_DECLARE_METATYPE(app::MarkerMap)
 Q_DECLARE_METATYPE(app::MapState)
-Q_DECLARE_METATYPE(app::CatchRecord)
-Q_DECLARE_METATYPE(app::CatchState)
 Q_DECLARE_METATYPE(app::BaseState)

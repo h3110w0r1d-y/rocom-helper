@@ -34,8 +34,6 @@ DataCenter::DataCenter(QObject *parent)
     , m_mapState(emptyMapState())
 {
     qRegisterMetaType<app::BaseState>("app::BaseState");
-    qRegisterMetaType<app::CatchState>("app::CatchState");
-    qRegisterMetaType<app::CatchRecord>("app::CatchRecord");
     qRegisterMetaType<app::MapState>("app::MapState");
     qRegisterMetaType<app::PlayerPositionPayload>("app::PlayerPositionPayload");
     qRegisterMetaType<app::PlayerState>("app::PlayerState");
@@ -56,39 +54,12 @@ void DataCenter::load()
     emit stateLoaded(m_mapState);
 }
 
-void DataCenter::loadPersistentMarkers(const QJsonArray &rows)
-{
-    m_mapState.markers.clear();
-    for (const QJsonValue &value : rows) {
-        const QJsonObject row = value.toObject();
-        MapMarker marker;
-        marker.id = row.value(QStringLiteral("id")).toString();
-        marker.markerType = normalizeMarkerType(row.value(QStringLiteral("marker_type")).toString());
-        marker.label = row.value(QStringLiteral("label")).toString();
-        marker.visible = row.value(QStringLiteral("visible")).toBool(true);
-        marker.temporary = false;
-        marker.gameX = intValue(row, QStringLiteral("game_x"));
-        marker.gameY = intValue(row, QStringLiteral("game_y"));
-        marker.gameZ = intValue(row, QStringLiteral("game_z"));
-
-        const QJsonDocument extraDoc = QJsonDocument::fromJson(row.value(QStringLiteral("extra_json")).toString(QStringLiteral("{}")).toUtf8());
-        marker.extra = extraDoc.isObject() ? extraDoc.object() : QJsonObject();
-        marker.hasLocation = resolveLocation(marker.gameX, marker.gameY, marker.gameZ, &marker.location);
-        if (!marker.id.isEmpty()) {
-            m_mapState.markers.insert(marker.id, marker);
-        }
-    }
-    if (syncMarkerSubtypes()) {
-        emit markerTypesChanged(m_mapState.markerTypes);
-    }
-    emit stateLoaded(m_mapState);
-}
-
 void DataCenter::save()
 {
     QDir().mkpath(QFileInfo(baseConfigPath()).absolutePath());
     QJsonObject object{
         {QStringLiteral("version"), m_baseState.version},
+        {QStringLiteral("http_host"), m_baseState.httpHost},
         {QStringLiteral("http_port"), m_baseState.httpPort},
     };
     QFile file(baseConfigPath());
@@ -130,16 +101,6 @@ MapState DataCenter::snapshot() const
     return m_mapState;
 }
 
-CatchState DataCenter::catchSnapshot() const
-{
-    return m_catchState;
-}
-
-const RuntimeContext &DataCenter::runtimeContext() const
-{
-    return m_runtimeContext;
-}
-
 QList<QPair<QString, QString>> DataCenter::mapOptions() const
 {
     return m_catalog.mapOptions();
@@ -150,11 +111,6 @@ QVector<MapLayerConfig> DataCenter::layersForMap(const QString &mapId) const
     const QString targetMapId = mapId.isEmpty() ? m_mapState.currentMapId : mapId;
     const MapConfig *config = m_catalog.mapById(targetMapId);
     return config == nullptr ? QVector<MapLayerConfig>() : config->layers;
-}
-
-void DataCenter::setRuntimeContext(const RuntimeContext &context)
-{
-    m_runtimeContext = context;
 }
 
 void DataCenter::setFollowPlayerMap(bool enabled)
@@ -432,20 +388,6 @@ void DataCenter::handleEvent(const AppEvent &event)
     case EventType::MapMarkerTypeVisibilityChanged:
         applyMarkerEvent(event);
         break;
-    case EventType::CatchRecordAdded:
-        if (event.catchRecord.has_value()) {
-            applyCatchRecord(*event.catchRecord);
-        }
-        break;
-    case EventType::ShinyPetDetected:
-        emit shinyPetDetected(event.payload);
-        break;
-    case EventType::BoxHintUpdated:
-        emit boxHintUpdated(event.payload);
-        break;
-    case EventType::EggTimeUpdated:
-        emit eggTimeUpdated(event.payload);
-        break;
     default:
         break;
     }
@@ -481,11 +423,29 @@ void DataCenter::loadBaseState()
     }
     const QJsonObject object = doc.object();
     m_baseState.version = object.value(QStringLiteral("version")).toInt(1);
+    m_baseState.httpHost = object.value(QStringLiteral("http_host")).toString(QString::fromLatin1(DefaultHttpHost)).trimmed();
+    if (m_baseState.httpHost.isEmpty()) {
+        m_baseState.httpHost = QString::fromLatin1(DefaultHttpHost);
+    }
     m_baseState.httpPort = object.value(QStringLiteral("http_port")).toInt(DefaultHttpPort);
     if (m_baseState.httpPort < MinHttpPort || m_baseState.httpPort > MaxHttpPort) {
         m_baseState.httpPort = DefaultHttpPort;
     }
     m_baseDirty = false;
+}
+
+void DataCenter::setHttpHost(const QString &host)
+{
+    QString normalized = host.trimmed();
+    if (normalized.isEmpty()) {
+        normalized = QString::fromLatin1(DefaultHttpHost);
+    }
+    if (m_baseState.httpHost == normalized) {
+        return;
+    }
+    m_baseState.httpHost = normalized;
+    markBaseDirty();
+    emit baseStateChanged(m_baseState);
 }
 
 void DataCenter::setHttpPort(int port)
@@ -497,6 +457,31 @@ void DataCenter::setHttpPort(int port)
         return;
     }
     m_baseState.httpPort = port;
+    markBaseDirty();
+    emit baseStateChanged(m_baseState);
+}
+
+void DataCenter::setHttpEndpoint(const QString &host, int port)
+{
+    bool changed = false;
+    QString normalizedHost = host.trimmed();
+    if (normalizedHost.isEmpty()) {
+        normalizedHost = QString::fromLatin1(DefaultHttpHost);
+    }
+    if (port < MinHttpPort || port > MaxHttpPort) {
+        port = DefaultHttpPort;
+    }
+    if (m_baseState.httpHost != normalizedHost) {
+        m_baseState.httpHost = normalizedHost;
+        changed = true;
+    }
+    if (m_baseState.httpPort != port) {
+        m_baseState.httpPort = port;
+        changed = true;
+    }
+    if (!changed) {
+        return;
+    }
     markBaseDirty();
     emit baseStateChanged(m_baseState);
 }
@@ -659,13 +644,6 @@ void DataCenter::applyMarkerEvent(const AppEvent &event)
         payload.contains(QStringLiteral("visible")),
         boolValue(payload, QStringLiteral("visible"), true),
         payload.value(QStringLiteral("extra")).toObject());
-}
-
-void DataCenter::applyCatchRecord(const CatchRecord &record)
-{
-    m_catchState.records.prepend(record);
-    emit catchStateChanged(m_catchState);
-    emit catchRecordAdded(record);
 }
 
 int DataCenter::intValue(const QJsonObject &object, const QString &key, int defaultValue)
