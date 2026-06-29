@@ -1,7 +1,9 @@
 #include "http_api_client.h"
 
+#include "app_version.h"
 #include "data/map_types.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -90,9 +92,8 @@ void HttpApiClient::start()
         return;
     }
     m_running = true;
-    emit statusChanged(QStringLiteral("正在连接 %1:%2").arg(m_host).arg(m_port));
-    fetchInitialMapPosition();
-    openMapEvents();
+    emit statusChanged(QStringLiteral("正在校验服务端版本 %1:%2").arg(m_host).arg(m_port));
+    fetchServerVersion();
 }
 
 void HttpApiClient::stop()
@@ -147,6 +148,102 @@ QUrl HttpApiClient::apiUrl(const QString &path, bool includeUid) const
     return url;
 }
 
+void HttpApiClient::fetchServerVersion()
+{
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/version")));
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleVersionReply(reply);
+    });
+}
+
+void HttpApiClient::handleVersionReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    if (!m_running) {
+        return;
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        m_running = false;
+        emit errorOccurred(QStringLiteral("读取服务端版本失败: %1").arg(reply->errorString()));
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    const QString serverVersion = doc.isObject()
+        ? doc.object().value(QStringLiteral("version")).toString()
+        : QString();
+    if (serverVersion != appVersionString()) {
+        m_running = false;
+        emit errorOccurred(QStringLiteral("服务端版本不一致: 服务端 %1，插件 %2")
+                               .arg(serverVersion.isEmpty() ? QStringLiteral("未知") : serverVersion,
+                                    appVersionString()));
+        return;
+    }
+
+    startAfterVersionChecked();
+}
+
+void HttpApiClient::startAfterVersionChecked()
+{
+    if (!m_running) {
+        return;
+    }
+    emit statusChanged(QStringLiteral("正在连接 %1:%2").arg(m_host).arg(m_port));
+    fetchInitialMapPosition();
+    fetchInitialMapMarkers();
+    openMapEvents();
+}
+
+void HttpApiClient::createMapMarker(const QJsonObject &marker)
+{
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/map-markers")));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = m_network.post(request, QJsonDocument(marker).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleMarkerMutationReply(reply, EventType::MapMarkerAdded);
+    });
+}
+
+void HttpApiClient::updateMapMarker(const QString &markerId, const QJsonObject &marker)
+{
+    const QString id = markerId.trimmed();
+    if (id.isEmpty()) {
+        return;
+    }
+
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/map-markers/%1").arg(id)));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = m_network.sendCustomRequest(
+        request,
+        QByteArrayLiteral("PUT"),
+        QJsonDocument(marker).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleMarkerMutationReply(reply, EventType::MapMarkerUpdated);
+    });
+}
+
+void HttpApiClient::deleteMapMarker(const QString &markerId)
+{
+    const QString id = markerId.trimmed();
+    if (id.isEmpty()) {
+        return;
+    }
+
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/map-markers/%1").arg(id)));
+    request.setRawHeader("Accept", "application/json");
+    QNetworkReply *reply = m_network.deleteResource(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleMarkerMutationReply(reply, EventType::MapMarkerDeleted);
+    });
+}
+
 void HttpApiClient::fetchInitialMapPosition()
 {
     QNetworkRequest request(apiUrl(QStringLiteral("/api/memory/map.player_position_changed"), true));
@@ -155,6 +252,17 @@ void HttpApiClient::fetchInitialMapPosition()
     QNetworkReply *reply = m_network.get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         handleMemoryReply(reply);
+    });
+}
+
+void HttpApiClient::fetchInitialMapMarkers()
+{
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/map-markers")));
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleMapMarkersReply(reply);
     });
 }
 
@@ -233,6 +341,47 @@ void HttpApiClient::handleMemoryReply(QNetworkReply *reply)
     }
 }
 
+void HttpApiClient::handleMapMarkersReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    if (!m_running) {
+        return;
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit errorOccurred(QStringLiteral("读取地图标注失败: %1").arg(reply->errorString()));
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (!doc.isArray()) {
+        emit errorOccurred(QStringLiteral("地图标注列表 JSON 无效"));
+        return;
+    }
+    emit mapMarkersLoaded(doc.array());
+}
+
+void HttpApiClient::handleMarkerMutationReply(QNetworkReply *reply, EventType eventType)
+{
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        emit errorOccurred(QStringLiteral("同步地图标注失败: %1").arg(reply->errorString()));
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (eventType == EventType::MapMarkerDeleted) {
+        if (doc.isObject()) {
+            publishMapMarkerEvent(eventType, doc.object());
+        }
+        return;
+    }
+    if (!doc.isObject()) {
+        emit errorOccurred(QStringLiteral("地图标注响应 JSON 无效"));
+        return;
+    }
+    publishMapMarkerEvent(eventType, doc.object());
+}
+
 void HttpApiClient::handleSseBytes()
 {
     if (m_sseReply == nullptr) {
@@ -292,16 +441,23 @@ void HttpApiClient::handleSseEvent(const QString &eventName, const QByteArray &d
         emit statusChanged(QStringLiteral("已连接 %1:%2").arg(m_host).arg(m_port));
         return;
     }
-    if (eventName != eventTypeName(EventType::PlayerPositionChanged)) {
-        return;
-    }
-
     const QJsonDocument doc = QJsonDocument::fromJson(data);
     if (!doc.isObject()) {
         emit errorOccurred(QStringLiteral("地图事件 JSON 无效"));
         return;
     }
-    publishPlayerPosition(doc.object());
+    const QJsonObject payload = doc.object();
+    if (eventName == eventTypeName(EventType::PlayerPositionChanged)) {
+        publishPlayerPosition(payload);
+    } else if (eventName == eventTypeName(EventType::MapMarkerAdded)) {
+        publishMapMarkerEvent(EventType::MapMarkerAdded, payload);
+    } else if (eventName == eventTypeName(EventType::MapMarkerUpdated)) {
+        publishMapMarkerEvent(EventType::MapMarkerUpdated, payload);
+    } else if (eventName == eventTypeName(EventType::MapMarkerDeleted)) {
+        publishMapMarkerEvent(EventType::MapMarkerDeleted, payload);
+    } else if (eventName == eventTypeName(EventType::MapMarkerVisibilityChanged)) {
+        publishMapMarkerEvent(EventType::MapMarkerVisibilityChanged, payload);
+    }
 }
 
 void HttpApiClient::publishPlayerPosition(const QJsonObject &payload)
@@ -316,6 +472,19 @@ void HttpApiClient::publishPlayerPosition(const QJsonObject &payload)
 
     AppEvent event = makePlayerPositionChangedEvent(EventSource::Http, EventFlag::UpdateUi, position);
     event.uid = m_uid;
+    event.payload = payload;
+    emit eventCreated(event);
+}
+
+void HttpApiClient::publishMapMarkerEvent(EventType eventType, const QJsonObject &payload)
+{
+    AppEvent event;
+    event.type = eventType;
+    event.source = EventSource::Http;
+    event.flags = EventFlag::UpdateUi;
+    event.occurredAt = QDateTime::currentDateTimeUtc();
+    event.name = eventTypeName(eventType);
+    event.uid = 0;
     event.payload = payload;
     emit eventCreated(event);
 }

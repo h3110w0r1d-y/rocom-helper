@@ -5,6 +5,7 @@
 #include "map_types.h"
 
 #include <QFile>
+#include <QJsonArray>
 #include <QObject>
 #include <QTimer>
 
@@ -18,6 +19,7 @@ public:
     ~DataCenter() override;
 
     void load();
+    void loadPersistentMarkers(const QJsonArray &rows);
     void save();
     void saveIfDirty();
     void close();

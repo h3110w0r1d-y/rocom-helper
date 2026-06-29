@@ -54,6 +54,39 @@ void DataCenter::load()
     emit stateLoaded(m_mapState);
 }
 
+void DataCenter::loadPersistentMarkers(const QJsonArray &rows)
+{
+    m_mapState.markers.clear();
+    for (const QJsonValue &value : rows) {
+        const QJsonObject row = value.toObject();
+        MapMarker marker;
+        marker.id = row.value(QStringLiteral("id")).toString();
+        marker.markerType = normalizeMarkerType(row.value(QStringLiteral("marker_type")).toString());
+        marker.label = row.value(QStringLiteral("label")).toString();
+        marker.visible = row.value(QStringLiteral("visible")).toBool(true);
+        marker.temporary = false;
+        marker.gameX = intValue(row, QStringLiteral("game_x"));
+        marker.gameY = intValue(row, QStringLiteral("game_y"));
+        marker.gameZ = intValue(row, QStringLiteral("game_z"));
+        marker.extra = row.value(QStringLiteral("extra")).toObject();
+        if (marker.extra.isEmpty() && row.value(QStringLiteral("extra_json")).isString()) {
+            const QJsonDocument extraDoc = QJsonDocument::fromJson(row.value(QStringLiteral("extra_json")).toString().toUtf8());
+            if (extraDoc.isObject()) {
+                marker.extra = extraDoc.object();
+            }
+        }
+        marker.hasLocation = resolveLocation(marker.gameX, marker.gameY, marker.gameZ, &marker.location);
+        if (!marker.id.isEmpty()) {
+            m_mapState.markers.insert(marker.id, marker);
+        }
+    }
+
+    if (syncMarkerSubtypes()) {
+        emit markerTypesChanged(m_mapState.markerTypes);
+    }
+    emit stateLoaded(m_mapState);
+}
+
 void DataCenter::save()
 {
     QDir().mkpath(QFileInfo(baseConfigPath()).absolutePath());

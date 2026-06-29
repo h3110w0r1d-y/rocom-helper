@@ -21,6 +21,42 @@
 #include <QVBoxLayout>
 
 namespace app {
+namespace {
+
+MapMarker markerById(const MapState &state, const QString &markerId, bool *found, bool *temporary)
+{
+    auto tempIt = state.temporaryMarkers.constFind(markerId);
+    if (tempIt != state.temporaryMarkers.constEnd()) {
+        if (found != nullptr) {
+            *found = true;
+        }
+        if (temporary != nullptr) {
+            *temporary = true;
+        }
+        return tempIt.value();
+    }
+
+    auto it = state.markers.constFind(markerId);
+    if (it != state.markers.constEnd()) {
+        if (found != nullptr) {
+            *found = true;
+        }
+        if (temporary != nullptr) {
+            *temporary = false;
+        }
+        return it.value();
+    }
+
+    if (found != nullptr) {
+        *found = false;
+    }
+    if (temporary != nullptr) {
+        *temporary = false;
+    }
+    return {};
+}
+
+} // namespace
 
 MapWindow::MapWindow(DataCenter *dataCenter, QWidget *parent)
     : QWidget(parent)
@@ -242,7 +278,22 @@ void MapWindow::markerMoved(const QString &markerId, double x, double y)
     if (!ok) {
         return;
     }
-    m_dataCenter->updateMarker(markerId, true, qRound(gamePos.x()), true, qRound(gamePos.y()), false, 0);
+    const MapState state = m_dataCenter->snapshot();
+    bool found = false;
+    bool temporary = false;
+    MapMarker marker = markerById(state, markerId, &found, &temporary);
+    if (!found) {
+        return;
+    }
+    if (temporary) {
+        m_dataCenter->updateMarker(markerId, true, qRound(gamePos.x()), true, qRound(gamePos.y()), false, 0);
+        return;
+    }
+
+    marker.gameX = qRound(gamePos.x());
+    marker.gameY = qRound(gamePos.y());
+    marker.gameZ = currentLayerDefaultZ();
+    emit markerUpdateRequested(marker.id, mapMarkerToJson(marker));
 }
 
 void MapWindow::showEvent(QShowEvent *event)
@@ -493,19 +544,38 @@ void MapWindow::createMarkerAt(double x, double y)
     if (!ok) {
         return;
     }
-    const MapMarker marker = m_dataCenter->createMarker(
-        m_typeCombo->currentData().toString().isEmpty()
-            ? QString::fromLatin1(DefaultMarkerType)
-            : m_typeCombo->currentData().toString(),
-        QString(),
-        QString(),
-        QJsonObject(),
-        qRound(gamePos.x()),
-        qRound(gamePos.y()),
-        currentLayerDefaultZ(),
-        true,
-        m_temporaryMarkerCheckbox->isChecked());
-    setSelectedMarkers({marker.id});
+    const QString markerType = m_typeCombo->currentData().toString().isEmpty()
+        ? QString::fromLatin1(DefaultMarkerType)
+        : m_typeCombo->currentData().toString();
+    const int gameX = qRound(gamePos.x());
+    const int gameY = qRound(gamePos.y());
+    const int gameZ = currentLayerDefaultZ();
+    if (m_temporaryMarkerCheckbox->isChecked()) {
+        const MapMarker marker = m_dataCenter->createMarker(
+            markerType,
+            QString(),
+            QString(),
+            QJsonObject(),
+            gameX,
+            gameY,
+            gameZ,
+            true,
+            true);
+        setSelectedMarkers({marker.id});
+        return;
+    }
+
+    // 持久标注统一交给服务端写库并通过 SSE 回放，避免插件和服务端双写。
+    emit markerCreateRequested({
+        {QStringLiteral("marker_type"), markerType},
+        {QStringLiteral("label"), QString()},
+        {QStringLiteral("visible"), true},
+        {QStringLiteral("temporary"), false},
+        {QStringLiteral("game_x"), gameX},
+        {QStringLiteral("game_y"), gameY},
+        {QStringLiteral("game_z"), gameZ},
+        {QStringLiteral("extra"), QJsonObject()},
+    });
 }
 
 void MapWindow::printCoordinate(double x, double y)
@@ -567,8 +637,19 @@ void MapWindow::deleteSelectedMarkers()
         return;
     }
     const QSet<QString> ids = m_selectedMarkerIds;
+    const MapState state = m_dataCenter->snapshot();
     for (const QString &markerId : ids) {
-        m_dataCenter->deleteMarker(markerId);
+        bool found = false;
+        bool temporary = false;
+        markerById(state, markerId, &found, &temporary);
+        if (!found) {
+            continue;
+        }
+        if (temporary) {
+            m_dataCenter->deleteMarker(markerId);
+        } else {
+            emit markerDeleteRequested(markerId);
+        }
     }
     setSelectedMarkers({});
 }

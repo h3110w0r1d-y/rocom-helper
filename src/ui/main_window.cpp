@@ -138,21 +138,9 @@ void MainWindow::buildUi()
     mapLayout->addWidget(m_clearPathButton, 3, 2);
     mapLayout->addWidget(m_markerFilterPanel, 4, 0, 1, 3);
 
-    auto *pendingGroup = new QGroupBox(QStringLiteral("待接入功能"), this);
-    auto *pendingLayout = new QGridLayout(pendingGroup);
-    m_petFilterButton = new QPushButton(QStringLiteral("宠物管理"), this);
-    m_showBoxHintButton = new QPushButton(QStringLiteral("盒子提示"), this);
-    m_showCatchButton = new QPushButton(QStringLiteral("捕捉日志"), this);
-    m_showEggTimeButton = new QPushButton(QStringLiteral("产蛋时间"), this);
-    pendingLayout->addWidget(m_petFilterButton, 0, 0);
-    pendingLayout->addWidget(m_showBoxHintButton, 0, 1);
-    pendingLayout->addWidget(m_showCatchButton, 0, 2);
-    pendingLayout->addWidget(m_showEggTimeButton, 1, 0);
-
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(serverGroup);
     layout->addWidget(mapGroup);
-    layout->addWidget(pendingGroup);
     layout->addStretch(1);
 }
 
@@ -179,6 +167,9 @@ void MainWindow::connectSignals()
     connect(m_clearPathButton, &QPushButton::clicked, m_mapWindow, &MapWindow::clearPathOverlays);
     connect(m_markerFilterPanel, &MarkerFilterPanel::typeVisibilityChanged, &m_dataCenter, &DataCenter::setMarkerTypeVisible);
     connect(m_markerFilterPanel, &MarkerFilterPanel::subtypeVisibilityChanged, &m_dataCenter, &DataCenter::setMarkerSubtypeVisible);
+    connect(m_mapWindow, &MapWindow::markerCreateRequested, &m_apiClient, &HttpApiClient::createMapMarker);
+    connect(m_mapWindow, &MapWindow::markerUpdateRequested, &m_apiClient, &HttpApiClient::updateMapMarker);
+    connect(m_mapWindow, &MapWindow::markerDeleteRequested, &m_apiClient, &HttpApiClient::deleteMapMarker);
 
     connect(&m_dataCenter, &DataCenter::baseStateLoaded, this, &MainWindow::onBaseStateLoaded);
     connect(&m_dataCenter, &DataCenter::stateLoaded, this, &MainWindow::onMapStateLoaded);
@@ -187,6 +178,7 @@ void MainWindow::connectSignals()
     connect(&m_dataCenter, &DataCenter::markerTypesChanged, this, &MainWindow::renderMarkerTypeControls);
 
     connect(&m_apiClient, &HttpApiClient::eventCreated, &m_eventDispatcher, &EventDispatcher::dispatch);
+    connect(&m_apiClient, &HttpApiClient::mapMarkersLoaded, &m_dataCenter, &DataCenter::loadPersistentMarkers);
     connect(&m_apiClient, &HttpApiClient::statusChanged, m_statusLabel, &QLabel::setText);
     connect(&m_apiClient, &HttpApiClient::errorOccurred, this, [this](const QString &message) {
         m_statusLabel->setText(message);

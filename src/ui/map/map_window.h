@@ -5,6 +5,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QJsonObject>
 #include <QPushButton>
 #include <QRect>
 #include <QShortcut>
@@ -36,6 +37,9 @@ public slots:
 
 signals:
     void opcodeConsumerVisibilityChanged();
+    void markerCreateRequested(const QJsonObject &marker);
+    void markerUpdateRequested(const QString &markerId, const QJsonObject &marker);
+    void markerDeleteRequested(const QString &markerId);
 
 protected:
     void showEvent(QShowEvent *event) override;
