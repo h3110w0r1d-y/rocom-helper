@@ -25,7 +25,6 @@
 namespace {
 
 constexpr int UpdateCheckTimeoutMs = 10000;
-constexpr int MaxConsecutiveUpdateFailures = 3;
 constexpr uint32_t UpdateCheckRsaExponent = 65537;
 
 struct UpdateCheckResult {
@@ -379,97 +378,6 @@ app::RuntimeContext runtimeContextFromUpdateCheckContent(QByteArray content)
     return result;
 }
 
-class UpdateGateMonitor : public QObject {
-public:
-    explicit UpdateGateMonitor(QObject *parent = nullptr)
-        : QObject(parent)
-    {
-        m_timer.setInterval(10 * 60 * 1000);
-        connect(&m_timer, &QTimer::timeout, this, [this] {
-            checkOnce();
-        });
-    }
-
-    void start(QWidget *messageParent)
-    {
-        m_messageParent = messageParent;
-        QTimer::singleShot(0, this, [this] {
-            checkOnce();
-        });
-        m_timer.start();
-    }
-
-private:
-    void checkOnce()
-    {
-        if (m_reply != nullptr) {
-            return;
-        }
-
-        QNetworkRequest request{QUrl(decodedUpdateCheckUrl())};
-        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-        m_reply = m_network.get(request);
-
-        QTimer::singleShot(UpdateCheckTimeoutMs, m_reply, [this, reply = m_reply] {
-            if (reply == m_reply && reply->isRunning()) {
-                reply->abort();
-            }
-        });
-        connect(m_reply, &QNetworkReply::finished, this, [this] {
-            handleReply();
-        });
-    }
-
-    void handleReply()
-    {
-        QNetworkReply *reply = m_reply;
-        m_reply = nullptr;
-        if (reply == nullptr) {
-            return;
-        }
-
-        const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QByteArray contentBytes = reply->readAll();
-        const QNetworkReply::NetworkError error = reply->error();
-        reply->deleteLater();
-
-        if (error != QNetworkReply::NoError || statusCode != 200) {
-            recordFailure();
-            return;
-        }
-
-        const app::RuntimeContext context = runtimeContextFromUpdateCheckContent(contentBytes);
-        if (!context.isValid()) {
-            recordFailure();
-            return;
-        }
-
-        m_failures = 0;
-        if (!m_disclaimerShown) {
-            const QString disclaimer = context.startupDisclaimer();
-            if (!disclaimer.isEmpty()) {
-                QMessageBox::information(m_messageParent, app::appWindowTitle(), disclaimer);
-            }
-            m_disclaimerShown = true;
-        }
-    }
-
-    void recordFailure()
-    {
-        ++m_failures;
-        if (m_failures >= MaxConsecutiveUpdateFailures) {
-            QCoreApplication::exit(1);
-        }
-    }
-
-    QNetworkAccessManager m_network;
-    QTimer m_timer;
-    QNetworkReply *m_reply = nullptr;
-    QWidget *m_messageParent = nullptr;
-    bool m_disclaimerShown = false;
-    int m_failures = 0;
-};
-
 class SingleInstanceGuard {
 public:
     explicit SingleInstanceGuard(const QString &lockFileName)
@@ -508,8 +416,5 @@ int main(int argc, char *argv[])
     app::MainWindow window;
     window.show();
 
-    // 插件只做联网状态验证，不把验证结果作为功能开关。
-    auto *updateMonitor = new UpdateGateMonitor(&app);
-    updateMonitor->start(&window);
     return app.exec();
 }

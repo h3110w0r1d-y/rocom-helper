@@ -14,6 +14,18 @@ class QNetworkReply;
 
 namespace app {
 
+enum class SseChannel {
+    Map,
+    BoxHint,
+};
+
+struct SseState {
+    QNetworkReply *reply = nullptr;
+    QByteArray lineBuffer;
+    QString currentEvent;
+    QByteArray currentData;
+};
+
 class HttpApiClient : public QObject {
     Q_OBJECT
 
@@ -35,6 +47,7 @@ public slots:
     void createMapMarker(const QJsonObject &marker);
     void updateMapMarker(const QString &markerId, const QJsonObject &marker);
     void deleteMapMarker(const QString &markerId);
+    void resetBoxHintCounter();
 
 signals:
     void eventCreated(const app::AppEvent &event);
@@ -49,31 +62,39 @@ private:
     void startAfterVersionChecked();
     void fetchInitialMapPosition();
     void fetchInitialMapMarkers();
+    void fetchInitialBoxHint();
     void openMapEvents();
+    void openBoxHintEvents();
     void closeMapEvents();
+    void closeBoxHintEvents();
     void scheduleReconnect();
     void handleMemoryReply(QNetworkReply *reply);
+    void handleBoxHintMemoryReply(QNetworkReply *reply);
     void handleMapMarkersReply(QNetworkReply *reply);
     void handleMarkerMutationReply(QNetworkReply *reply, app::EventType eventType);
-    void handleSseBytes();
-    void processSseLine(const QByteArray &line);
-    void flushSseEvent();
-    void handleSseEvent(const QString &eventName, const QByteArray &data);
+    void handleBoxHintResetReply(QNetworkReply *reply);
+    void openSseEvents(app::SseChannel channel);
+    void closeSseEvents(app::SseChannel channel);
+    void handleSseBytes(app::SseChannel channel);
+    void processSseLine(app::SseChannel channel, const QByteArray &line);
+    void flushSseEvent(app::SseChannel channel);
+    void handleSseEvent(app::SseChannel channel, const QString &eventName, const QByteArray &data);
     void publishPlayerPosition(const QJsonObject &payload);
     void publishMapMarkerEvent(app::EventType eventType, const QJsonObject &payload);
+    void publishSimpleEvent(app::EventType eventType, const QJsonObject &payload);
+    app::SseState *sseState(app::SseChannel channel);
+    QString sseChannelName(app::SseChannel channel) const;
     static QString normalizeHost(QString host);
     static int clampPort(int port);
 
     QNetworkAccessManager m_network;
-    QNetworkReply *m_sseReply = nullptr;
+    SseState m_mapSse;
+    SseState m_boxHintSse;
     QTimer m_reconnectTimer;
     QString m_host = QStringLiteral("127.0.0.1");
     int m_port = 4939;
     quint64 m_uid = 0;
     bool m_running = false;
-    QByteArray m_lineBuffer;
-    QString m_currentEvent;
-    QByteArray m_currentData;
 };
 
 } // namespace app

@@ -3,6 +3,7 @@
 #include "data/data_center.h"
 #include "events/event_dispatcher.h"
 #include "http/http_api_client.h"
+#include "ui/catch/box_hint_window.h"
 #include "ui/marker_filter_panel.h"
 #include "ui/map/map_window.h"
 
@@ -10,6 +11,7 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QList>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
@@ -36,6 +38,7 @@ private:
     void disconnectFromServer();
     void applyServerEndpoint(bool restartClient);
     void showMap();
+    void showBoxHint();
     void showPendingFeature();
     void importPathOverlay();
     QStringList extractSvgPaths(const QString &filePath) const;
@@ -49,9 +52,12 @@ private:
     void onMapChanged(const QString &mapId);
     void onLayerChanged(const QString &layerId);
     void renderMarkerTypeControls(const MarkerTypeMap &markerTypes);
+    void showShinyAlert(const QJsonObject &payload);
+    void forgetAlert(QMessageBox *dialog);
 
     DataCenter m_dataCenter;
     MapWindow *m_mapWindow = nullptr;
+    BoxHintWindow *m_boxHintWindow = nullptr;
     EventDispatcher m_eventDispatcher;
     HttpApiClient m_apiClient;
 
@@ -73,10 +79,8 @@ private:
     QPushButton *m_importPathButton = nullptr;
     QPushButton *m_clearPathButton = nullptr;
     MarkerFilterPanel *m_markerFilterPanel = nullptr;
-    QPushButton *m_petFilterButton = nullptr;
     QPushButton *m_showBoxHintButton = nullptr;
-    QPushButton *m_showCatchButton = nullptr;
-    QPushButton *m_showEggTimeButton = nullptr;
+    QList<QMessageBox *> m_alertWindows;
     QTimer m_saveTimer;
 };
 

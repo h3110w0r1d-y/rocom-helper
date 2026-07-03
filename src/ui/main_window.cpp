@@ -1,6 +1,7 @@
 #include "main_window.h"
 
 #include "app_version.h"
+#include "ui/window_flags.h"
 
 #include <QCloseEvent>
 #include <QFile>
@@ -49,6 +50,7 @@ QString pointsToPathData(const QString &points, bool closed)
 MainWindow::MainWindow(QWidget *parent)
     : QWidget(parent)
     , m_mapWindow(new MapWindow(&m_dataCenter))
+    , m_boxHintWindow(new BoxHintWindow)
 {
     setWindowTitle(appWindowTitle());
     resize(460, 420);
@@ -69,6 +71,7 @@ MainWindow::~MainWindow()
     m_apiClient.stop();
     m_dataCenter.close();
     delete m_mapWindow;
+    delete m_boxHintWindow;
 }
 
 void MainWindow::buildUi()
@@ -138,9 +141,17 @@ void MainWindow::buildUi()
     mapLayout->addWidget(m_clearPathButton, 3, 2);
     mapLayout->addWidget(m_markerFilterPanel, 4, 0, 1, 3);
 
+    auto *hintGroup = new QGroupBox(QStringLiteral("辅助提示"), this);
+    auto *hintLayout = new QHBoxLayout(hintGroup);
+    hintLayout->setContentsMargins(8, 8, 8, 8);
+    m_showBoxHintButton = new QPushButton(QStringLiteral("盒子提示"), this);
+    hintLayout->addWidget(m_showBoxHintButton);
+    hintLayout->addStretch(1);
+
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(serverGroup);
     layout->addWidget(mapGroup);
+    layout->addWidget(hintGroup);
     layout->addStretch(1);
 }
 
@@ -149,10 +160,7 @@ void MainWindow::connectSignals()
     connect(m_connectButton, &QPushButton::clicked, this, &MainWindow::connectToServer);
     connect(m_disconnectButton, &QPushButton::clicked, this, &MainWindow::disconnectFromServer);
     connect(m_showMapButton, &QPushButton::clicked, this, &MainWindow::showMap);
-    connect(m_petFilterButton, &QPushButton::clicked, this, &MainWindow::showPendingFeature);
-    connect(m_showBoxHintButton, &QPushButton::clicked, this, &MainWindow::showPendingFeature);
-    connect(m_showCatchButton, &QPushButton::clicked, this, &MainWindow::showPendingFeature);
-    connect(m_showEggTimeButton, &QPushButton::clicked, this, &MainWindow::showPendingFeature);
+    connect(m_showBoxHintButton, &QPushButton::clicked, this, &MainWindow::showBoxHint);
     connect(m_topCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setAlwaysOnTop);
     connect(m_miniMapCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setMiniMapMode);
     connect(m_mapWindow->miniMapCheckbox(), &QCheckBox::toggled, m_miniMapCheckbox, &QCheckBox::setChecked);
@@ -170,12 +178,15 @@ void MainWindow::connectSignals()
     connect(m_mapWindow, &MapWindow::markerCreateRequested, &m_apiClient, &HttpApiClient::createMapMarker);
     connect(m_mapWindow, &MapWindow::markerUpdateRequested, &m_apiClient, &HttpApiClient::updateMapMarker);
     connect(m_mapWindow, &MapWindow::markerDeleteRequested, &m_apiClient, &HttpApiClient::deleteMapMarker);
+    connect(m_boxHintWindow, &BoxHintWindow::resetRequested, &m_apiClient, &HttpApiClient::resetBoxHintCounter);
 
     connect(&m_dataCenter, &DataCenter::baseStateLoaded, this, &MainWindow::onBaseStateLoaded);
     connect(&m_dataCenter, &DataCenter::stateLoaded, this, &MainWindow::onMapStateLoaded);
     connect(&m_dataCenter, &DataCenter::mapChanged, this, &MainWindow::onMapChanged);
     connect(&m_dataCenter, &DataCenter::layerChanged, this, &MainWindow::onLayerChanged);
     connect(&m_dataCenter, &DataCenter::markerTypesChanged, this, &MainWindow::renderMarkerTypeControls);
+    connect(&m_dataCenter, &DataCenter::boxHintUpdated, m_boxHintWindow, &BoxHintWindow::updateHint);
+    connect(&m_dataCenter, &DataCenter::shinyPetDetected, this, &MainWindow::showShinyAlert);
 
     connect(&m_apiClient, &HttpApiClient::eventCreated, &m_eventDispatcher, &EventDispatcher::dispatch);
     connect(&m_apiClient, &HttpApiClient::mapMarkersLoaded, &m_dataCenter, &DataCenter::loadPersistentMarkers);
@@ -221,6 +232,13 @@ void MainWindow::showMap()
     m_mapWindow->show();
     m_mapWindow->raise();
     m_mapWindow->activateWindow();
+}
+
+void MainWindow::showBoxHint()
+{
+    m_boxHintWindow->show();
+    m_boxHintWindow->raise();
+    m_boxHintWindow->activateWindow();
 }
 
 void MainWindow::showPendingFeature()
@@ -379,11 +397,59 @@ void MainWindow::renderMarkerTypeControls(const MarkerTypeMap &markerTypes)
     }
 }
 
+void MainWindow::showShinyAlert(const QJsonObject &payload)
+{
+    const QString message = payload.value(QStringLiteral("message")).toString(QStringLiteral("发现异色！！"));
+    QStringList details;
+    details << message;
+    if (payload.contains(QStringLiteral("base_conf_id"))) {
+        details << QStringLiteral("宠物配置 ID: %1").arg(payload.value(QStringLiteral("base_conf_id")).toInt());
+    }
+    if (!payload.value(QStringLiteral("attr_name")).toString().isEmpty()) {
+        details << QStringLiteral("加成属性: %1").arg(payload.value(QStringLiteral("attr_name")).toString());
+    }
+    if (payload.contains(QStringLiteral("pet_rarity_type"))) {
+        details << QStringLiteral("稀有类型: %1").arg(payload.value(QStringLiteral("pet_rarity_type")).toInt());
+    }
+    if (payload.contains(QStringLiteral("pet_mutation_type"))) {
+        details << QStringLiteral("变异类型: %1").arg(payload.value(QStringLiteral("pet_mutation_type")).toInt());
+    }
+
+    auto *box = new QMessageBox(this);
+    box->setIcon(QMessageBox::Warning);
+    box->setWindowTitle(payload.value(QStringLiteral("title")).toString(QStringLiteral("异色提示")));
+    box->setText(QStringLiteral("发现异色！！"));
+    box->setInformativeText(details.join(QLatin1Char('\n')));
+    box->setStandardButtons(QMessageBox::Ok);
+    box->setWindowModality(Qt::NonModal);
+    setCloseOnlyWindowControls(box, true);
+    connect(box, &QMessageBox::finished, this, [this, box] {
+        forgetAlert(box);
+    });
+    m_alertWindows.append(box);
+    box->show();
+    box->raise();
+    box->activateWindow();
+}
+
+void MainWindow::forgetAlert(QMessageBox *dialog)
+{
+    m_alertWindows.removeAll(dialog);
+    dialog->deleteLater();
+}
+
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     m_apiClient.stop();
     m_dataCenter.close();
     m_mapWindow->hide();
+    m_boxHintWindow->hide();
+    const QList<QMessageBox *> alerts = m_alertWindows;
+    for (QMessageBox *dialog : alerts) {
+        if (dialog != nullptr) {
+            dialog->close();
+        }
+    }
     event->accept();
 }
 

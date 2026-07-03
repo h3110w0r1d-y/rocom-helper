@@ -71,7 +71,10 @@ HttpApiClient::HttpApiClient(QObject *parent)
 {
     m_reconnectTimer.setSingleShot(true);
     m_reconnectTimer.setInterval(3000);
-    connect(&m_reconnectTimer, &QTimer::timeout, this, &HttpApiClient::openMapEvents);
+    connect(&m_reconnectTimer, &QTimer::timeout, this, [this] {
+        openMapEvents();
+        openBoxHintEvents();
+    });
 }
 
 HttpApiClient::~HttpApiClient()
@@ -101,6 +104,7 @@ void HttpApiClient::stop()
     m_running = false;
     m_reconnectTimer.stop();
     closeMapEvents();
+    closeBoxHintEvents();
     emit statusChanged(QStringLiteral("未连接"));
 }
 
@@ -194,7 +198,9 @@ void HttpApiClient::startAfterVersionChecked()
     emit statusChanged(QStringLiteral("正在连接 %1:%2").arg(m_host).arg(m_port));
     fetchInitialMapPosition();
     fetchInitialMapMarkers();
+    fetchInitialBoxHint();
     openMapEvents();
+    openBoxHintEvents();
 }
 
 void HttpApiClient::createMapMarker(const QJsonObject &marker)
@@ -244,6 +250,17 @@ void HttpApiClient::deleteMapMarker(const QString &markerId)
     });
 }
 
+void HttpApiClient::resetBoxHintCounter()
+{
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/box-hint/reset")));
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = m_network.post(request, QByteArray());
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleBoxHintResetReply(reply);
+    });
+}
+
 void HttpApiClient::fetchInitialMapPosition()
 {
     QNetworkRequest request(apiUrl(QStringLiteral("/api/memory/map.player_position_changed"), true));
@@ -252,6 +269,17 @@ void HttpApiClient::fetchInitialMapPosition()
     QNetworkReply *reply = m_network.get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         handleMemoryReply(reply);
+    });
+}
+
+void HttpApiClient::fetchInitialBoxHint()
+{
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/memory/box.hint_updated")));
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleBoxHintMemoryReply(reply);
     });
 }
 
@@ -268,47 +296,22 @@ void HttpApiClient::fetchInitialMapMarkers()
 
 void HttpApiClient::openMapEvents()
 {
-    if (!m_running || m_sseReply != nullptr) {
-        return;
-    }
+    openSseEvents(SseChannel::Map);
+}
 
-    m_lineBuffer.clear();
-    m_currentEvent.clear();
-    m_currentData.clear();
-
-    QNetworkRequest request(apiUrl(QStringLiteral("/api/events/map"), true));
-    request.setRawHeader("Accept", "text/event-stream");
-    request.setRawHeader("Cache-Control", "no-cache");
-
-    m_sseReply = m_network.get(request);
-    connect(m_sseReply, &QNetworkReply::readyRead, this, &HttpApiClient::handleSseBytes);
-    connect(m_sseReply, &QNetworkReply::finished, this, [this] {
-        if (m_sseReply == nullptr) {
-            return;
-        }
-        const QString errorText = m_sseReply->error() == QNetworkReply::NoError
-            ? QString()
-            : m_sseReply->errorString();
-        closeMapEvents();
-        if (m_running) {
-            if (!errorText.isEmpty()) {
-                emit errorOccurred(QStringLiteral("SSE 连接断开: %1").arg(errorText));
-            }
-            scheduleReconnect();
-        }
-    });
+void HttpApiClient::openBoxHintEvents()
+{
+    openSseEvents(SseChannel::BoxHint);
 }
 
 void HttpApiClient::closeMapEvents()
 {
-    if (m_sseReply == nullptr) {
-        return;
-    }
-    QNetworkReply *reply = m_sseReply;
-    m_sseReply = nullptr;
-    reply->disconnect(this);
-    reply->abort();
-    reply->deleteLater();
+    closeSseEvents(SseChannel::Map);
+}
+
+void HttpApiClient::closeBoxHintEvents()
+{
+    closeSseEvents(SseChannel::BoxHint);
 }
 
 void HttpApiClient::scheduleReconnect()
@@ -338,6 +341,34 @@ void HttpApiClient::handleMemoryReply(QNetworkReply *reply)
     const QJsonObject latest = doc.object().value(QStringLiteral("latest")).toObject();
     if (!latest.isEmpty()) {
         publishPlayerPosition(latest);
+    }
+}
+
+void HttpApiClient::handleBoxHintMemoryReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    if (!m_running) {
+        return;
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit errorOccurred(QStringLiteral("读取盒子提示快照失败: %1").arg(reply->errorString()));
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (!doc.isObject()) {
+        return;
+    }
+    const QJsonObject root = doc.object();
+    QJsonObject latest = root.value(QStringLiteral("latest")).toObject();
+    if (root.contains(QStringLiteral("box_hint_id"))) {
+        if (latest.isEmpty()) {
+            latest.insert(QStringLiteral("counter_only"), true);
+        }
+        latest.insert(QStringLiteral("box_hint_id"), root.value(QStringLiteral("box_hint_id")));
+    }
+    if (!latest.isEmpty()) {
+        publishSimpleEvent(EventType::BoxHintUpdated, latest);
     }
 }
 
@@ -382,34 +413,109 @@ void HttpApiClient::handleMarkerMutationReply(QNetworkReply *reply, EventType ev
     publishMapMarkerEvent(eventType, doc.object());
 }
 
-void HttpApiClient::handleSseBytes()
+void HttpApiClient::handleBoxHintResetReply(QNetworkReply *reply)
 {
-    if (m_sseReply == nullptr) {
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        emit errorOccurred(QStringLiteral("重置盒子统计失败: %1").arg(reply->errorString()));
         return;
     }
-    m_lineBuffer.append(m_sseReply->readAll());
-    int newline = -1;
-    while ((newline = m_lineBuffer.indexOf('\n')) >= 0) {
-        QByteArray line = m_lineBuffer.left(newline);
-        m_lineBuffer.remove(0, newline + 1);
-        if (line.endsWith('\r')) {
-            line.chop(1);
-        }
-        processSseLine(line);
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (!doc.isObject() || !doc.object().value(QStringLiteral("ok")).toBool(false)) {
+        emit errorOccurred(QStringLiteral("重置盒子统计响应 JSON 无效"));
     }
 }
 
-void HttpApiClient::processSseLine(const QByteArray &line)
+void HttpApiClient::openSseEvents(SseChannel channel)
 {
+    SseState *state = sseState(channel);
+    if (!m_running || state == nullptr || state->reply != nullptr) {
+        return;
+    }
+
+    state->lineBuffer.clear();
+    state->currentEvent.clear();
+    state->currentData.clear();
+
+    const QString path = channel == SseChannel::Map
+        ? QStringLiteral("/api/events/map")
+        : QStringLiteral("/api/events/box-hint");
+    QNetworkRequest request(apiUrl(path, channel == SseChannel::Map));
+    request.setRawHeader("Accept", "text/event-stream");
+    request.setRawHeader("Cache-Control", "no-cache");
+
+    state->reply = m_network.get(request);
+    connect(state->reply, &QNetworkReply::readyRead, this, [this, channel] {
+        handleSseBytes(channel);
+    });
+    connect(state->reply, &QNetworkReply::finished, this, [this, channel] {
+        SseState *finishedState = sseState(channel);
+        if (finishedState == nullptr || finishedState->reply == nullptr) {
+            return;
+        }
+        const QString errorText = finishedState->reply->error() == QNetworkReply::NoError
+            ? QString()
+            : finishedState->reply->errorString();
+        closeSseEvents(channel);
+        if (m_running) {
+            if (!errorText.isEmpty()) {
+                emit errorOccurred(QStringLiteral("%1 SSE 连接断开: %2")
+                                       .arg(sseChannelName(channel), errorText));
+            }
+            scheduleReconnect();
+        }
+    });
+}
+
+void HttpApiClient::closeSseEvents(SseChannel channel)
+{
+    SseState *state = sseState(channel);
+    if (state == nullptr || state->reply == nullptr) {
+        return;
+    }
+    QNetworkReply *reply = state->reply;
+    state->reply = nullptr;
+    state->lineBuffer.clear();
+    state->currentEvent.clear();
+    state->currentData.clear();
+    reply->disconnect(this);
+    reply->abort();
+    reply->deleteLater();
+}
+
+void HttpApiClient::handleSseBytes(SseChannel channel)
+{
+    SseState *state = sseState(channel);
+    if (state == nullptr || state->reply == nullptr) {
+        return;
+    }
+    state->lineBuffer.append(state->reply->readAll());
+    int newline = -1;
+    while ((newline = state->lineBuffer.indexOf('\n')) >= 0) {
+        QByteArray line = state->lineBuffer.left(newline);
+        state->lineBuffer.remove(0, newline + 1);
+        if (line.endsWith('\r')) {
+            line.chop(1);
+        }
+        processSseLine(channel, line);
+    }
+}
+
+void HttpApiClient::processSseLine(SseChannel channel, const QByteArray &line)
+{
+    SseState *state = sseState(channel);
+    if (state == nullptr) {
+        return;
+    }
     if (line.isEmpty()) {
-        flushSseEvent();
+        flushSseEvent(channel);
         return;
     }
     if (line.startsWith(':')) {
         return;
     }
     if (line.startsWith("event:")) {
-        m_currentEvent = QString::fromUtf8(line.mid(6).trimmed());
+        state->currentEvent = QString::fromUtf8(line.mid(6).trimmed());
         return;
     }
     if (line.startsWith("data:")) {
@@ -417,25 +523,29 @@ void HttpApiClient::processSseLine(const QByteArray &line)
         if (data.startsWith(' ')) {
             data.remove(0, 1);
         }
-        if (!m_currentData.isEmpty()) {
-            m_currentData.append('\n');
+        if (!state->currentData.isEmpty()) {
+            state->currentData.append('\n');
         }
-        m_currentData.append(data);
+        state->currentData.append(data);
     }
 }
 
-void HttpApiClient::flushSseEvent()
+void HttpApiClient::flushSseEvent(SseChannel channel)
 {
-    const QString eventName = m_currentEvent.isEmpty() ? QStringLiteral("message") : m_currentEvent;
-    const QByteArray data = m_currentData;
-    m_currentEvent.clear();
-    m_currentData.clear();
+    SseState *state = sseState(channel);
+    if (state == nullptr) {
+        return;
+    }
+    const QString eventName = state->currentEvent.isEmpty() ? QStringLiteral("message") : state->currentEvent;
+    const QByteArray data = state->currentData;
+    state->currentEvent.clear();
+    state->currentData.clear();
     if (!data.isEmpty()) {
-        handleSseEvent(eventName, data);
+        handleSseEvent(channel, eventName, data);
     }
 }
 
-void HttpApiClient::handleSseEvent(const QString &eventName, const QByteArray &data)
+void HttpApiClient::handleSseEvent(SseChannel channel, const QString &eventName, const QByteArray &data)
 {
     if (eventName == QStringLiteral("ready")) {
         emit statusChanged(QStringLiteral("已连接 %1:%2").arg(m_host).arg(m_port));
@@ -443,20 +553,24 @@ void HttpApiClient::handleSseEvent(const QString &eventName, const QByteArray &d
     }
     const QJsonDocument doc = QJsonDocument::fromJson(data);
     if (!doc.isObject()) {
-        emit errorOccurred(QStringLiteral("地图事件 JSON 无效"));
+        emit errorOccurred(QStringLiteral("%1 事件 JSON 无效").arg(sseChannelName(channel)));
         return;
     }
     const QJsonObject payload = doc.object();
-    if (eventName == eventTypeName(EventType::PlayerPositionChanged)) {
+    if (channel == SseChannel::Map && eventName == eventTypeName(EventType::PlayerPositionChanged)) {
         publishPlayerPosition(payload);
-    } else if (eventName == eventTypeName(EventType::MapMarkerAdded)) {
+    } else if (channel == SseChannel::Map && eventName == eventTypeName(EventType::MapMarkerAdded)) {
         publishMapMarkerEvent(EventType::MapMarkerAdded, payload);
-    } else if (eventName == eventTypeName(EventType::MapMarkerUpdated)) {
+    } else if (channel == SseChannel::Map && eventName == eventTypeName(EventType::MapMarkerUpdated)) {
         publishMapMarkerEvent(EventType::MapMarkerUpdated, payload);
-    } else if (eventName == eventTypeName(EventType::MapMarkerDeleted)) {
+    } else if (channel == SseChannel::Map && eventName == eventTypeName(EventType::MapMarkerDeleted)) {
         publishMapMarkerEvent(EventType::MapMarkerDeleted, payload);
-    } else if (eventName == eventTypeName(EventType::MapMarkerVisibilityChanged)) {
+    } else if (channel == SseChannel::Map && eventName == eventTypeName(EventType::MapMarkerVisibilityChanged)) {
         publishMapMarkerEvent(EventType::MapMarkerVisibilityChanged, payload);
+    } else if (channel == SseChannel::BoxHint && eventName == eventTypeName(EventType::BoxHintUpdated)) {
+        publishSimpleEvent(EventType::BoxHintUpdated, payload);
+    } else if (channel == SseChannel::BoxHint && eventName == eventTypeName(EventType::ShinyPetDetected)) {
+        publishSimpleEvent(EventType::ShinyPetDetected, payload);
     }
 }
 
@@ -487,6 +601,41 @@ void HttpApiClient::publishMapMarkerEvent(EventType eventType, const QJsonObject
     event.uid = 0;
     event.payload = payload;
     emit eventCreated(event);
+}
+
+void HttpApiClient::publishSimpleEvent(EventType eventType, const QJsonObject &payload)
+{
+    AppEvent event;
+    event.type = eventType;
+    event.source = EventSource::Http;
+    event.flags = EventFlag::UpdateUi;
+    event.occurredAt = QDateTime::currentDateTimeUtc();
+    event.name = eventTypeName(eventType);
+    event.uid = 0;
+    event.payload = payload;
+    emit eventCreated(event);
+}
+
+SseState *HttpApiClient::sseState(SseChannel channel)
+{
+    switch (channel) {
+    case SseChannel::Map:
+        return &m_mapSse;
+    case SseChannel::BoxHint:
+        return &m_boxHintSse;
+    }
+    return nullptr;
+}
+
+QString HttpApiClient::sseChannelName(SseChannel channel) const
+{
+    switch (channel) {
+    case SseChannel::Map:
+        return QStringLiteral("地图");
+    case SseChannel::BoxHint:
+        return QStringLiteral("盒子提示");
+    }
+    return QStringLiteral("SSE");
 }
 
 QString HttpApiClient::normalizeHost(QString host)

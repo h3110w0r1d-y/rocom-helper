@@ -20,6 +20,8 @@ enum class EventType {
     MapMarkerDeleted,
     MapMarkerVisibilityChanged,
     MapMarkerTypeVisibilityChanged,
+    ShinyPetDetected,
+    BoxHintUpdated,
 };
 
 enum class EventSource {
@@ -61,6 +63,10 @@ inline QString eventTypeName(EventType type)
         return QStringLiteral("map.marker_visibility_changed");
     case EventType::MapMarkerTypeVisibilityChanged:
         return QStringLiteral("map.marker_type_visibility_changed");
+    case EventType::ShinyPetDetected:
+        return QStringLiteral("catch.shiny_pet_detected");
+    case EventType::BoxHintUpdated:
+        return QStringLiteral("box.hint_updated");
     case EventType::Unknown:
         break;
     }
