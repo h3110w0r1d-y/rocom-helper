@@ -72,6 +72,7 @@ MarkerTypeMap defaultMarkerTypes()
         {QStringLiteral("task"), QStringLiteral("任务")},
         {QStringLiteral("shining"), QStringLiteral("异色")},
         {QStringLiteral("glass"), QStringLiteral("炫彩")},
+        {QStringLiteral("s2box"), QStringLiteral("S2盒子")},
     };
 
     MarkerTypeMap result;

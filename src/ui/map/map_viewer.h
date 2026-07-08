@@ -121,7 +121,7 @@ private:
     QPoint m_rubberOrigin;
     bool m_rubberBandActive = false;
     double m_minZoom = 0.04;
-    double m_maxZoom = 2.0;
+    double m_maxZoom = 4.0;
 };
 
 } // namespace app
