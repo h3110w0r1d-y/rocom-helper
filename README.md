@@ -53,32 +53,24 @@
 | macOS 通过 PlayCover 玩游戏 | macOS 工具 + 网卡抓包 | 需要安装 Wireshark 的 ChmodBPF；PlayCover 游戏进程名为 `com.tencent.nrc` |
 | 手机玩游戏 | 软路由网卡抓包 / 电脑热点 / Reqable | 让手机流量经过运行工具的设备，再由工具解析 |
 
-两种流量模式的区别：
+两种部署方式的区别：
 
 - **网卡抓包（pcap，推荐）**：工具被动监听指定网卡上的 TCP 8195 流量，无需修改游戏网络或配置代理。只要所选网卡能够看到游戏流量，即可直接使用。
-- **SOCKS5 代理（备选）**：工具启动一个 SOCKS5 服务，游戏的 TCP 8195 连接主动经过该服务。适合抓包设备不在游戏流量路径上，或无法取得网卡抓包权限的环境，需要额外配置 Proxifier、Clash 等转发规则。
+- **Docker microsocks（备选）**：Docker 镜像先启动 microsocks，再让 roco_helper 通过 pcap 抓取容器 `eth0` 上的代理流量。适合宿主机不在游戏流量路径上的环境，需要额外配置 Proxifier、Clash 等转发规则。
 
 ## 工作原理与默认端口
 
-工具有两条相互独立、可切换的流量入口：
-
-1. 网卡抓包模式使用 pcap 监听 `tcp port 8195`，进行 TCP 流重组。
-2. SOCKS5 模式内置无认证 SOCKS5 服务，负责转发连接，并且只解析目标端口为 `8195` 的流量。
-3. 完整流量会继续经过 TGCP 分包、解密和 Protobuf 解析，转成宠物、地图、孵蛋等数据。
-4. 解析结果保存在数据目录中，并通过内置 Web 服务提供界面。
-
-SOCKS5 的转发与解析使用了隔离的工作队列：解析繁忙时不会故意阻塞游戏流量；队列压力过大时，对应连接可能只转发而停止解析，并在日志中给出提示。
+roco_helper 监听 `tcp port 8195` 并进行 TCP 流重组。Docker SOCKS5 部署中的代理转发由独立的 microsocks 进程负责，roco_helper 只抓取该进程在容器网卡上产生的流量。完整流量随后经过 TGCP 分包、解密和 Protobuf 解析，结果保存在数据目录中并通过内置 Web 服务提供界面。
 
 | 用途 | 默认值 | 说明 |
 | --- | --- | --- |
 | 游戏目标端口 | `8195/TCP` | 工具固定解析的游戏流量端口 |
 | Web 服务 | `4939/TCP` | 浏览器访问工具界面 |
-| SOCKS5 服务 | `1080/TCP` | 仅 SOCKS5 模式需要 |
+| microsocks 服务 | `1080/TCP` | 仅 Docker SOCKS5 部署需要 |
 | 桌面端 Web 绑定地址 | `127.0.0.1` | 只允许本机访问；需要供局域网访问时改为 `0.0.0.0` |
-| 桌面端 SOCKS5 绑定地址 | `127.0.0.1` | 只供本机使用；供其他设备使用时改为 `0.0.0.0` |
 
 > [!WARNING]
-> 内置 SOCKS5 当前不需要用户名和密码，并且只支持 IPv4 监听及 IPv4 SOCKS5 CONNECT 请求。不要将 `1080` 端口映射到公网；只应在可信局域网内使用，并通过路由器或系统防火墙限制来源。
+> Docker 镜像中的 microsocks 不需要用户名和密码。不要将 `1080` 端口映射到公网；只应在可信局域网内使用，并通过路由器或系统防火墙限制来源。
 
 ## 下载
 
@@ -96,7 +88,7 @@ Docker 镜像为 `h3110w0r1d6/roco-helper:latest`，同时支持 `amd64` 和 `ar
 Docker 有两种 Compose 配置，**二选一即可，不要同时启动**：
 
 - `docker-compose.yml`：网卡抓包模式，适合软路由或能确保流量经过宿主机的环境。
-- `docker-compose-socks5.yml`：SOCKS5 模式，适合无法让游戏流量经过 Docker 宿主机网卡的环境。
+- `docker-compose-socks5.yml`：容器内 microsocks + pcap，适合无法让游戏流量经过 Docker 宿主机网卡的环境。
 
 两种配置都将容器 `/data` 映射到 Compose 文件同目录的 `./data`，数据库和日志会保存在这里。升级或重建容器不会清空该目录，但仍建议定期备份。
 
@@ -210,25 +202,13 @@ Install Npcap in WinPcap API-compatible Mode
 
 安装或重新安装后建议重启工具；仍无法看到网卡时可重启 Windows。
 
-### 方式一：网卡抓包
+### 网卡抓包
 
 1. 启动 `roco_helper-vX.X.X.exe`。
-2. 在“流量解析”中选择“网卡抓包”。
-3. 选择游戏实际使用的网卡，例如正在联网的以太网或 Wi-Fi。不要仅凭名称选择虚拟网卡；不确定时可根据界面显示的 IP 地址判断。
-4. 点击“开启解析”。桌面端会记住上次配置，正常情况下启动后也会自动尝试开启已保存的模式。
-5. 点击“打开 Web 界面”，确认页面能打开。
-6. 最后启动游戏点击 `进入世界`。
-
-### 方式二：本机 SOCKS5（备选）
-
-1. 在工具中先点击“停止解析”。运行中不能直接切换模式。
-2. 模式选择“SOCKS5 代理”。
-3. 游戏和工具在同一台电脑时，监听地址使用 `127.0.0.1`，端口使用 `1080`。
-4. 点击“开启解析”。
-5. 按本文的 [Proxifier](#使用-proxifier-将游戏流量转入-socks5) 或 [Clash](#使用-clash-将游戏流量转入-socks5) 说明配置规则。
-6. 确认规则只匹配 `nrc-win64-shipping.exe` 的目标端口 `8195`，然后进入世界。
-
-如果要让另一台电脑或手机使用这台 Windows 电脑的 SOCKS5，应将监听地址改为 `0.0.0.0`，客户端填写这台电脑的局域网 IP，并在 Windows 防火墙中仅对专用网络放行 TCP `1080`。
+2. 选择游戏实际使用的网卡，例如正在联网的以太网或 Wi-Fi。不要仅凭名称选择虚拟网卡；不确定时可根据界面显示的 IP 地址判断。
+3. 点击“开启解析”。桌面端会记住上次选择的网卡，正常情况下启动后也会自动尝试开启解析。
+4. 点击“打开 Web 界面”，确认页面能打开。
+5. 最后启动游戏点击 `进入世界`。
 
 ## macOS 使用
 
@@ -246,19 +226,10 @@ sudo xattr -dr com.apple.quarantine /Applications/roco_helper.app
 
 ### 网卡抓包模式
 
-1. 启动应用，在“流量解析”中选择“网卡抓包”。
+1. 启动应用，在“流量解析”中选择承载目标流量的网卡。
 2. 选择承载目标流量的 Wi-Fi、以太网或热点接口。
 3. 点击“开启解析”，再打开 Web 界面。
 4. 让游戏流量经过该 Mac，并在进入世界前保持解析运行。
-
-### SOCKS5 模式
-
-- 只供本机客户端使用：监听 `127.0.0.1:1080`。
-- 供局域网内另一台电脑或手机使用：监听 `0.0.0.0:1080`，客户端填写 Mac 的局域网 IP。
-
-《洛克王国：世界》目前没有原生 macOS 客户端，但可以通过 PlayCover 运行移动版。此时可使用 macOS 版 Proxifier 或支持进程规则的 Clash，将 PlayCover 中的游戏进程 `com.tencent.nrc`、目标端口 `8195` 转入工具的 SOCKS5 服务。详细配置与 Windows 相同，参见下方 [Proxifier](#使用-proxifier-将游戏流量转入-socks5) 和 [Clash](#使用-clash-将游戏流量转入-socks5) 章节。
-
-macOS 防火墙如有询问，应允许工具接受局域网连接。切换“网卡抓包”和“SOCKS5 代理”前必须先点击“停止解析”。
 
 ## 使用 Proxifier 将游戏流量转入 SOCKS5
 
@@ -268,12 +239,12 @@ Proxifier 同时提供 Windows 和 macOS 版本，两端的配置方法基本相
 
 进入 `Profile -> Proxy Servers -> Add`：
 
-| 字段 | 本机工具 | Docker / 另一台设备上的工具 |
-| --- | --- | --- |
-| Address | `127.0.0.1` | NAS、软路由或工具所在电脑的局域网 IP |
-| Port | `1080` | `1080`，除非你修改了配置 |
-| Protocol | `SOCKS Version 5` | `SOCKS Version 5` |
-| Authentication | 不启用 | 不启用 |
+| 字段 | Docker 部署 |
+| --- | --- |
+| Address | NAS、软路由或 Docker 宿主机的局域网 IP |
+| Port | `1080`，除非你修改了端口映射 |
+| Protocol | `SOCKS Version 5` |
+| Authentication | 不启用 |
 
 可使用 Proxifier 的检查功能测试连通性。检查失败时先排查 IP、Docker 容器状态和防火墙，不要急着启动游戏。
 
@@ -299,14 +270,14 @@ com.tencent.nrc;nrc-win64-shipping.exe
 
 ### 3. 验证
 
-1. 先启动工具的 SOCKS5 模式。
+1. 先启动 Docker SOCKS5 部署。
 2. 再启动 Proxifier 并启用规则。
 3. 最后进入游戏。
 4. 在 Proxifier 连接列表中确认 `com.tencent.nrc` 或 `nrc-win64-shipping.exe` 访问 `目标IP:8195` 时，Action 是配置的 SOCKS5。
 
 ## 使用 Clash 将游戏流量转入 SOCKS5
 
-支持覆写脚本、进程规则和 `AND` 规则的 Clash 客户端，可将本地工具或局域网工具作为一个 SOCKS5 节点注入现有订阅，并把自定义规则放在订阅规则最前面。
+支持覆写脚本、进程规则和 `AND` 规则的 Clash 客户端，可将 Docker 部署作为一个 SOCKS5 节点注入现有订阅，并把自定义规则放在订阅规则最前面。
 
 ```javascript
 const main = (config) => {
@@ -315,11 +286,11 @@ const main = (config) => {
 
   const localSocksProxyName = 'RocoSocks5';
 
-  // 注入工具内置的 SOCKS5 服务。
+  // 注入 Docker 镜像中 microsocks 提供的 SOCKS5 服务。
   config.proxies.push({
     name: localSocksProxyName,
     type: 'socks5',
-    server: '127.0.0.1', // 本机工具填 127.0.0.1；Docker/NAS/软路由填其局域网 IP
+    server: '192.168.1.2', // 修改为 Docker 宿主机的局域网 IP
     port: 1080,
   });
 
@@ -371,7 +342,7 @@ const main = (config) => {
 
 不要只以“Web 页面能打开”判断解析正常。建议依次确认：
 
-1. 工具状态显示“运行中”或“SOCKS5 代理运行中”。
+1. 工具状态显示“运行中”。
 2. Web 页面可以访问：
    - 本机桌面端：`http://127.0.0.1:4939`
    - Docker/局域网设备：`http://设备局域网IP:4939`
@@ -409,19 +380,15 @@ Windows 可按 `Win + R`，输入 `%APPDATA%\roco_helper` 后回车。macOS 可�
 - 游戏能联网不代表规则已命中；在 Proxifier/Clash 中检查实际连接和规则结果。
 - 规则应同时匹配游戏进程与目标端口 `8195`。macOS PlayCover 使用 `com.tencent.nrc`，Windows 使用 `nrc-win64-shipping.exe`。
 - 自定义规则必须位于 `DIRECT`、`MATCH` 等兜底规则之前。
-- 本机工具用 `127.0.0.1`；远程 Docker/NAS 使用远程设备局域网 IP。
-- 工具只解析目标端口 8195。其他经过 SOCKS5 的连接可以转发，但不会进入游戏解析流程。
+- 使用 Docker 宿主机的局域网 IP，不能填写游戏电脑自己的 `127.0.0.1`。
+- roco_helper 只抓取并解析目标端口 8195；其他经过 microsocks 的连接只会被转发。
 
 ### 启用 SOCKS5 后游戏无法连接
 
 - 检查 SOCKS5 服务是否已经启动，以及 IP、端口是否填反。
 - 检查 Windows/macOS/Linux 防火墙和 Docker 的 `1080:1080` 端口映射。
-- 当前 SOCKS5 仅支持 IPv4、无认证和 CONNECT；不要在客户端启用用户名密码。
+- 镜像中的 microsocks 未启用认证，不要在客户端配置用户名密码。
 - 先用客户端的代理检查功能测试，再启动游戏。
-
-### 无法切换抓包模式
-
-先点击“停止解析”，再选择“网卡抓包”或“SOCKS5 代理”，最后重新点击“开启解析”。运行期间切换会被工具拒绝，以免两个模式同时处理流量。
 
 ### Windows 看不到网卡或提示抓包权限错误
 
@@ -439,26 +406,13 @@ Windows 可按 `Win + R`，输入 `%APPDATA%\roco_helper` 后回车。macOS 可�
 
 ## Linux CLI 与环境变量
 
-直接运行 Linux 可执行文件时，支持网卡抓包和 SOCKS5 两种模式。
+Linux 可执行文件仅使用网卡抓包模式。
 
 ### 网卡抓包示例
 
 ```shell
 ./roco_helper \
-  --capture-mode=pcap \
   --iface=eth0 \
-  --bind=0.0.0.0 \
-  --port=4939 \
-  --data_dir=./data
-```
-
-### SOCKS5 示例
-
-```shell
-./roco_helper \
-  --capture-mode=socks5 \
-  --socks5-bind=0.0.0.0 \
-  --socks5-port=1080 \
   --bind=0.0.0.0 \
   --port=4939 \
   --data_dir=./data
@@ -468,21 +422,18 @@ Windows 可按 `Win + R`，输入 `%APPDATA%\roco_helper` 后回车。macOS 可�
 
 | CLI 参数 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `--capture-mode` | `ROCO_CAPTURE_MODE` | `pcap` | `pcap` 或 `socks5` |
-| `-i, --iface` | `ROCO_IFACE` | 默认路由网卡 | pcap 模式监听接口 |
-| `--socks5-bind` | `ROCO_SOCKS5_BIND` | `127.0.0.1` | SOCKS5 IPv4 监听地址 |
-| `--socks5-port` | `ROCO_SOCKS5_PORT` | `1080` | SOCKS5 监听端口 |
+| `-i, --iface` | `ROCO_IFACE` | 默认路由网卡 | pcap 监听接口 |
 | `-b, --bind` | `ROCO_BIND` | `127.0.0.1` | Web 服务绑定地址 |
 | `-p, --port` | `ROCO_PORT` | `4939` | Web 服务端口 |
 | `-d, --data_dir` | `ROCO_DATA_DIR` | Qt 应用数据目录 | 数据库和日志目录 |
 
-命令行参数优先于环境变量。为兼容旧部署，SOCKS5 还识别 `SOCKS5_ENABLE`、`SOCKS5_BIND` 和 `SOCKS5_PORT`，新配置建议统一使用 `ROCO_*` 变量。
+命令行参数优先于环境变量。Docker 镜像中的 microsocks 由镜像入口脚本独立启动，不属于 roco_helper 的 CLI 功能。
 
 ## 功能介绍
 
 ### 桌面端控制窗口
 
-桌面端可以选择网卡抓包或 SOCKS5、启动/停止解析、修改 Web 服务监听地址和端口，并打开 Web 界面。
+桌面端可以选择网卡、启动或停止解析、修改 Web 服务监听地址和端口，并打开 Web 界面。
 
 <img src="./screenshots/img1.png" alt="桌面端控制窗口" width="400">
 

@@ -4,7 +4,6 @@ services:
     container_name: roco-helper
     restart: unless-stopped
     environment:
-      - ROCO_CAPTURE_MODE=socks5
       - ROCO_SOCKS5_BIND=0.0.0.0
       - ROCO_SOCKS5_PORT=1080
       - ROCO_BIND=0.0.0.0

@@ -8,7 +8,6 @@ services:
       - NET_RAW
       - NET_ADMIN
     environment:
-      - ROCO_CAPTURE_MODE=pcap
       - ROCO_IFACE=eth0
       - ROCO_BIND=0.0.0.0
       - ROCO_PORT=4939
