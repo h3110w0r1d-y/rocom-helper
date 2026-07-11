@@ -41,27 +41,27 @@
       "mask_opacity": 0.7,
       "images": [
         {
-          "path": "A2_08_Assets_Humanities_06_LM.png",
+          "path": "A2_08_Assets_Humanities_06_LM.webp",
           "x": 5047,
           "y": 5560
         },
         {
-          "path": "Cave_A2_02_02_CaveTunnel_Cave_A2_02_02_01.png",
+          "path": "Cave_A2_02_02_CaveTunnel_Cave_A2_02_02_01.webp",
           "x": 4197,
           "y": 4786
         },
         {
-          "path": "Cave_A2_07_02_CaveTunnel_Cave_A2_07_02_01.png",
+          "path": "Cave_A2_07_02_CaveTunnel_Cave_A2_07_02_01.webp",
           "x": 4766,
           "y": 4433
         },
         {
-          "path": "Cave_A2_02_01_CaveTunnel_Cave_A2_02_01_01.png",
+          "path": "Cave_A2_02_01_CaveTunnel_Cave_A2_02_01_01.webp",
           "x": 4094,
           "y": 4301
         },
         {
-          "path": "Cave_A2_07_01_CaveTunnel_Cave_A2_07_01_01.png",
+          "path": "Cave_A2_07_01_CaveTunnel_Cave_A2_07_01_01.webp",
           "x": 5403,
           "y": 4499
         }
@@ -76,12 +76,12 @@
       "mask_opacity": 0.7,
       "images": [
         {
-          "path": "Cave_A2_02_02_CaveTunnel_Cave_A2_02_02_02.png",
+          "path": "Cave_A2_02_02_CaveTunnel_Cave_A2_02_02_02.webp",
           "x": 4197,
           "y": 4786
         },
         {
-          "path": "Cave_A2_02_01_CaveTunnel_Cave_A2_02_01_02.png",
+          "path": "Cave_A2_02_01_CaveTunnel_Cave_A2_02_01_02.webp",
           "x": 4094,
           "y": 4301
         }

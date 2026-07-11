@@ -557,7 +557,7 @@ bool MapViewer::loadMapImages(const MapConfig &config, QImage *fullImage, QMap<Q
     if (fullImage == nullptr || layerImages == nullptr) {
         return false;
     }
-    *fullImage = readImage(config.resolvePath(QStringLiteral("full.png")), true);
+    *fullImage = readImage(config.resolvePath(QStringLiteral("full.webp")), true);
     if (fullImage->isNull()) {
         return false;
     }
