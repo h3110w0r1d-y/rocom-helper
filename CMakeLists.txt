@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
 
-project(roco_helper_plugin VERSION 3.2.4 LANGUAGES CXX)
+project(roco_helper_plugin VERSION 3.3.0 LANGUAGES CXX)
 
 # ---------------------------------------------------------------------------
 # Toolchain / platform defaults
@@ -11,7 +11,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/mingw_static.cmake")
 roco_setup_mingw_static_linking()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/release_optimizations.cmake")
 
-set(ROCO_APP_VERSION "3.2.4")
+set(ROCO_APP_VERSION "3.3.0")
 if(PROJECT_VERSION_PATCH STREQUAL "")
     set(ROCO_APP_VERSION_PATCH 0)
 else()

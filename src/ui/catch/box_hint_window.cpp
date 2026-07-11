@@ -1,5 +1,6 @@
 #include "box_hint_window.h"
 
+#include "ui/overlay/overlay_host_controller.h"
 #include "ui/window_flags.h"
 
 #include <QCloseEvent>
@@ -19,7 +20,14 @@ BoxHintWindow::BoxHintWindow(QWidget *parent)
     , m_resetCountButton(new QPushButton(QStringLiteral("重置统计"), this))
 {
     setWindowTitle(QStringLiteral("盒子提示"));
+#ifdef Q_OS_WIN
+    OverlayHostOptions overlayOptions;
+    overlayOptions.title = windowTitle();
+    overlayOptions.staysOnTop = true;
+    m_overlayHost = new OverlayHostController(this, overlayOptions, this);
+#else
     setCloseOnlyWindowControls(this, true);
+#endif
 
     QFont kindFont = m_kindLabel->font();
     kindFont.setPointSize(kindFont.pointSize() + 12);
@@ -40,11 +48,22 @@ BoxHintWindow::BoxHintWindow(QWidget *parent)
 
     auto *layout = new QVBoxLayout(this);
     layout->setSizeConstraint(QLayout::SetFixedSize);
-    layout->setContentsMargins(18, 14, 18, 14);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(6);
-    layout->addWidget(m_kindLabel);
-    layout->addWidget(m_attrLabel);
-    layout->addLayout(countRow);
+
+#ifdef Q_OS_WIN
+    m_overlayHost->install();
+    layout->addWidget(m_overlayHost->captionBar());
+#endif
+
+    auto *contentLayout = new QVBoxLayout;
+    contentLayout->setContentsMargins(18, 14, 18, 14);
+    contentLayout->setSpacing(6);
+    contentLayout->addWidget(m_kindLabel);
+    contentLayout->addWidget(m_attrLabel);
+    contentLayout->addLayout(countRow);
+
+    layout->addLayout(contentLayout);
 
     adjustSize();
 }
@@ -91,8 +110,23 @@ void BoxHintWindow::resetCount()
 
 void BoxHintWindow::closeEvent(QCloseEvent *event)
 {
+#ifdef Q_OS_WIN
+    if (m_overlayHost != nullptr && m_overlayHost->isOverlayEnabled()) {
+        m_overlayHost->setOverlayEnabled(false);
+    }
+#endif
     event->ignore();
     hide();
 }
+
+#ifdef Q_OS_WIN
+bool BoxHintWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+    if (m_overlayHost != nullptr && m_overlayHost->handleNativeEvent(eventType, message, result)) {
+        return true;
+    }
+    return QWidget::nativeEvent(eventType, message, result);
+}
+#endif
 
 } // namespace app
