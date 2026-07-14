@@ -103,7 +103,7 @@ DELETE /api/map-markers/<id>
 客户端订阅地图事件流：
 
 ```text
-GET /api/events/map?uid=<uid>
+GET /api/events?uid=<uid>
 Accept: text/event-stream
 ```
 
@@ -119,7 +119,7 @@ data: {"ok":true}
 
 ```text
 event: map.player_position_changed
-data: {"game_x":0,"game_y":0,"game_z":0,"rotation":0.0,"ctrl_rotation":0.0,"visible":true}
+data: {"uid":"123","event":"map.player_position_changed","data":{"game_x":0,"game_y":0,"game_z":0,"rotation":0.0,"ctrl_rotation":0.0,"visible":true}}
 
 ```
 

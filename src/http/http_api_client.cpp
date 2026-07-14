@@ -73,7 +73,6 @@ HttpApiClient::HttpApiClient(QObject *parent)
     m_reconnectTimer.setInterval(3000);
     connect(&m_reconnectTimer, &QTimer::timeout, this, [this] {
         openMapEvents();
-        openBoxHintEvents();
     });
 }
 
@@ -104,7 +103,6 @@ void HttpApiClient::stop()
     m_running = false;
     m_reconnectTimer.stop();
     closeMapEvents();
-    closeBoxHintEvents();
     emit statusChanged(QStringLiteral("未连接"));
 }
 
@@ -198,9 +196,7 @@ void HttpApiClient::startAfterVersionChecked()
     emit statusChanged(QStringLiteral("正在连接 %1:%2").arg(m_host).arg(m_port));
     fetchInitialMapPosition();
     fetchInitialMapMarkers();
-    fetchInitialBoxHint();
     openMapEvents();
-    openBoxHintEvents();
 }
 
 void HttpApiClient::createMapMarker(const QJsonObject &marker)
@@ -250,17 +246,6 @@ void HttpApiClient::deleteMapMarker(const QString &markerId)
     });
 }
 
-void HttpApiClient::resetBoxHintCounter()
-{
-    QNetworkRequest request(apiUrl(QStringLiteral("/api/box-hint/reset")));
-    request.setRawHeader("Accept", "application/json");
-
-    QNetworkReply *reply = m_network.post(request, QByteArray());
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        handleBoxHintResetReply(reply);
-    });
-}
-
 void HttpApiClient::fetchInitialMapPosition()
 {
     QNetworkRequest request(apiUrl(QStringLiteral("/api/memory/map.player_position_changed"), true));
@@ -269,17 +254,6 @@ void HttpApiClient::fetchInitialMapPosition()
     QNetworkReply *reply = m_network.get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         handleMemoryReply(reply);
-    });
-}
-
-void HttpApiClient::fetchInitialBoxHint()
-{
-    QNetworkRequest request(apiUrl(QStringLiteral("/api/memory/box.hint_updated")));
-    request.setRawHeader("Accept", "application/json");
-
-    QNetworkReply *reply = m_network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        handleBoxHintMemoryReply(reply);
     });
 }
 
@@ -299,19 +273,9 @@ void HttpApiClient::openMapEvents()
     openSseEvents(SseChannel::Map);
 }
 
-void HttpApiClient::openBoxHintEvents()
-{
-    openSseEvents(SseChannel::BoxHint);
-}
-
 void HttpApiClient::closeMapEvents()
 {
     closeSseEvents(SseChannel::Map);
-}
-
-void HttpApiClient::closeBoxHintEvents()
-{
-    closeSseEvents(SseChannel::BoxHint);
 }
 
 void HttpApiClient::scheduleReconnect()
@@ -341,34 +305,6 @@ void HttpApiClient::handleMemoryReply(QNetworkReply *reply)
     const QJsonObject latest = doc.object().value(QStringLiteral("latest")).toObject();
     if (!latest.isEmpty()) {
         publishPlayerPosition(latest);
-    }
-}
-
-void HttpApiClient::handleBoxHintMemoryReply(QNetworkReply *reply)
-{
-    reply->deleteLater();
-    if (!m_running) {
-        return;
-    }
-    if (reply->error() != QNetworkReply::NoError) {
-        emit errorOccurred(QStringLiteral("读取盒子提示快照失败: %1").arg(reply->errorString()));
-        return;
-    }
-
-    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    if (!doc.isObject()) {
-        return;
-    }
-    const QJsonObject root = doc.object();
-    QJsonObject latest = root.value(QStringLiteral("latest")).toObject();
-    if (root.contains(QStringLiteral("box_hint_id"))) {
-        if (latest.isEmpty()) {
-            latest.insert(QStringLiteral("counter_only"), true);
-        }
-        latest.insert(QStringLiteral("box_hint_id"), root.value(QStringLiteral("box_hint_id")));
-    }
-    if (!latest.isEmpty()) {
-        publishSimpleEvent(EventType::BoxHintUpdated, latest);
     }
 }
 
@@ -413,19 +349,6 @@ void HttpApiClient::handleMarkerMutationReply(QNetworkReply *reply, EventType ev
     publishMapMarkerEvent(eventType, doc.object());
 }
 
-void HttpApiClient::handleBoxHintResetReply(QNetworkReply *reply)
-{
-    reply->deleteLater();
-    if (reply->error() != QNetworkReply::NoError) {
-        emit errorOccurred(QStringLiteral("重置盒子统计失败: %1").arg(reply->errorString()));
-        return;
-    }
-    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    if (!doc.isObject() || !doc.object().value(QStringLiteral("ok")).toBool(false)) {
-        emit errorOccurred(QStringLiteral("重置盒子统计响应 JSON 无效"));
-    }
-}
-
 void HttpApiClient::openSseEvents(SseChannel channel)
 {
     SseState *state = sseState(channel);
@@ -437,10 +360,7 @@ void HttpApiClient::openSseEvents(SseChannel channel)
     state->currentEvent.clear();
     state->currentData.clear();
 
-    const QString path = channel == SseChannel::Map
-        ? QStringLiteral("/api/events/map")
-        : QStringLiteral("/api/events/box-hint");
-    QNetworkRequest request(apiUrl(path, channel == SseChannel::Map));
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/events"), true));
     request.setRawHeader("Accept", "text/event-stream");
     request.setRawHeader("Cache-Control", "no-cache");
 
@@ -556,21 +476,20 @@ void HttpApiClient::handleSseEvent(SseChannel channel, const QString &eventName,
         emit errorOccurred(QStringLiteral("%1 事件 JSON 无效").arg(sseChannelName(channel)));
         return;
     }
-    const QJsonObject payload = doc.object();
-    if (channel == SseChannel::Map && eventName == eventTypeName(EventType::PlayerPositionChanged)) {
+    const QJsonObject envelope = doc.object();
+    const QJsonObject payload = envelope.value(QStringLiteral("data")).isObject()
+        ? envelope.value(QStringLiteral("data")).toObject()
+        : envelope;
+    if (eventName == eventTypeName(EventType::PlayerPositionChanged)) {
         publishPlayerPosition(payload);
-    } else if (channel == SseChannel::Map && eventName == eventTypeName(EventType::MapMarkerAdded)) {
+    } else if (eventName == eventTypeName(EventType::MapMarkerAdded)) {
         publishMapMarkerEvent(EventType::MapMarkerAdded, payload);
-    } else if (channel == SseChannel::Map && eventName == eventTypeName(EventType::MapMarkerUpdated)) {
+    } else if (eventName == eventTypeName(EventType::MapMarkerUpdated)) {
         publishMapMarkerEvent(EventType::MapMarkerUpdated, payload);
-    } else if (channel == SseChannel::Map && eventName == eventTypeName(EventType::MapMarkerDeleted)) {
+    } else if (eventName == eventTypeName(EventType::MapMarkerDeleted)) {
         publishMapMarkerEvent(EventType::MapMarkerDeleted, payload);
-    } else if (channel == SseChannel::Map && eventName == eventTypeName(EventType::MapMarkerVisibilityChanged)) {
+    } else if (eventName == eventTypeName(EventType::MapMarkerVisibilityChanged)) {
         publishMapMarkerEvent(EventType::MapMarkerVisibilityChanged, payload);
-    } else if (channel == SseChannel::BoxHint && eventName == eventTypeName(EventType::BoxHintUpdated)) {
-        publishSimpleEvent(EventType::BoxHintUpdated, payload);
-    } else if (channel == SseChannel::BoxHint && eventName == eventTypeName(EventType::ShinyPetDetected)) {
-        publishSimpleEvent(EventType::ShinyPetDetected, payload);
     }
 }
 
@@ -621,8 +540,6 @@ SseState *HttpApiClient::sseState(SseChannel channel)
     switch (channel) {
     case SseChannel::Map:
         return &m_mapSse;
-    case SseChannel::BoxHint:
-        return &m_boxHintSse;
     }
     return nullptr;
 }
@@ -632,8 +549,6 @@ QString HttpApiClient::sseChannelName(SseChannel channel) const
     switch (channel) {
     case SseChannel::Map:
         return QStringLiteral("地图");
-    case SseChannel::BoxHint:
-        return QStringLiteral("盒子提示");
     }
     return QStringLiteral("SSE");
 }

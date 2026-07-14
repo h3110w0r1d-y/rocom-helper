@@ -3,7 +3,6 @@
 #include "data/data_center.h"
 #include "events/event_dispatcher.h"
 #include "http/http_api_client.h"
-#include "ui/catch/box_hint_window.h"
 #include "ui/marker_filter_panel.h"
 #include "ui/map/map_window.h"
 
@@ -38,7 +37,6 @@ private:
     void disconnectFromServer();
     void applyServerEndpoint(bool restartClient);
     void showMap();
-    void showBoxHint();
     void showPendingFeature();
     void importPathOverlay();
     QStringList extractSvgPaths(const QString &filePath) const;
@@ -57,7 +55,6 @@ private:
 
     DataCenter m_dataCenter;
     MapWindow *m_mapWindow = nullptr;
-    BoxHintWindow *m_boxHintWindow = nullptr;
     EventDispatcher m_eventDispatcher;
     HttpApiClient m_apiClient;
 
@@ -79,7 +76,6 @@ private:
     QPushButton *m_importPathButton = nullptr;
     QPushButton *m_clearPathButton = nullptr;
     MarkerFilterPanel *m_markerFilterPanel = nullptr;
-    QPushButton *m_showBoxHintButton = nullptr;
     QList<QMessageBox *> m_alertWindows;
     QTimer m_saveTimer;
 };
