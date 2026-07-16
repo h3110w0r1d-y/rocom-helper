@@ -126,4 +126,13 @@ if(WIN32)
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${ROCO_DIST_DIR}"
             VERBATIM
     )
+
+    set(UPX_PROGRAM "D:/upx-5.2.0-win64/upx.exe")
+    if(EXISTS "${UPX_PROGRAM}")
+        add_custom_command(TARGET roco_helper_plugin POST_BUILD
+                COMMAND "${UPX_PROGRAM}" --best "$<TARGET_FILE:roco_helper_plugin>"
+                COMMENT "Compressing executable with UPX..."
+                VERBATIM
+        )
+    endif()
 endif()
