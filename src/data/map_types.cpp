@@ -68,11 +68,9 @@ MarkerTypeMap defaultMarkerTypes()
         {QStringLiteral("chest"), QStringLiteral("宝箱")},
         {QStringLiteral("plant"), QStringLiteral("花朵")},
         {QStringLiteral("ore"), QStringLiteral("矿石")},
-        {QStringLiteral("star"), QStringLiteral("星星")},
         {QStringLiteral("task"), QStringLiteral("任务")},
         {QStringLiteral("shining"), QStringLiteral("异色")},
         {QStringLiteral("glass"), QStringLiteral("炫彩")},
-        {QStringLiteral("s2box"), QStringLiteral("S2盒子")},
     };
 
     MarkerTypeMap result;

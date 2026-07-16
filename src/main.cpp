@@ -20,8 +20,6 @@
 #include <iterator>
 #include <vector>
 
-#include "data/runtime_context.h"
-
 namespace {
 
 class SingleInstanceGuard {
