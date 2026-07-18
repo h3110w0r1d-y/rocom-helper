@@ -33,6 +33,7 @@ public:
     void setHttpHost(const QString &host);
     void setHttpPort(int port);
     void setHttpEndpoint(const QString &host, int port);
+    void setDefaultUid(quint64 uid);
 
     QList<QPair<QString, QString>> mapOptions() const;
     QVector<MapLayerConfig> layersForMap(const QString &mapId = {}) const;

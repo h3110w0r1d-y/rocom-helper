@@ -174,6 +174,7 @@ struct BaseState {
     int version = 1;
     QString httpHost = QString::fromLatin1(DefaultHttpHost);
     int httpPort = DefaultHttpPort;
+    quint64 selectedUid = 0;
 };
 
 MarkerTypeMap defaultMarkerTypes();

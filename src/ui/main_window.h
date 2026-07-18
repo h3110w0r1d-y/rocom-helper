@@ -36,6 +36,8 @@ private:
     void connectToServer();
     void disconnectFromServer();
     void applyServerEndpoint(bool restartClient);
+    void populateUidCombo(const QJsonArray &users);
+    void saveSelectedUid();
     void showMap();
     void showPendingFeature();
     void importPathOverlay();
@@ -60,7 +62,7 @@ private:
 
     QLineEdit *m_httpHostEdit = nullptr;
     QSpinBox *m_httpPortSpin = nullptr;
-    QLineEdit *m_uidEdit = nullptr;
+    QComboBox *m_uidCombo = nullptr;
     QPushButton *m_connectButton = nullptr;
     QPushButton *m_disconnectButton = nullptr;
     QLabel *m_statusLabel = nullptr;

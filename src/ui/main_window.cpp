@@ -84,8 +84,9 @@ void MainWindow::buildUi()
     m_httpPortSpin = new QSpinBox(this);
     m_httpPortSpin->setRange(MinHttpPort, MaxHttpPort);
     m_httpPortSpin->setValue(DefaultHttpPort);
-    m_uidEdit = new QLineEdit(this);
-    m_uidEdit->setPlaceholderText(QStringLiteral("0 表示所有用户"));
+    m_uidCombo = new QComboBox(this);
+    m_uidCombo->setEnabled(false);
+    m_uidCombo->addItem(QStringLiteral("连接后获取"));
     m_connectButton = new QPushButton(QStringLiteral("连接"), this);
     m_disconnectButton = new QPushButton(QStringLiteral("断开"), this);
     m_statusLabel = new QLabel(QStringLiteral("未连接"), this);
@@ -96,7 +97,7 @@ void MainWindow::buildUi()
     endpointRow->addWidget(m_httpHostEdit, 1);
     endpointRow->addWidget(m_httpPortSpin);
     serverForm->addRow(QStringLiteral("地址"), endpointRow);
-    serverForm->addRow(QStringLiteral("UID"), m_uidEdit);
+    serverForm->addRow(QStringLiteral("UID"), m_uidCombo);
 
     auto *connectionRow = new QHBoxLayout();
     connectionRow->setContentsMargins(0, 0, 0, 0);
@@ -149,6 +150,7 @@ void MainWindow::connectSignals()
 {
     connect(m_connectButton, &QPushButton::clicked, this, &MainWindow::connectToServer);
     connect(m_disconnectButton, &QPushButton::clicked, this, &MainWindow::disconnectFromServer);
+    connect(m_uidCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::saveSelectedUid);
     connect(m_showMapButton, &QPushButton::clicked, this, &MainWindow::showMap);
     connect(m_topCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setAlwaysOnTop);
     connect(m_miniMapCheckbox, &QCheckBox::toggled, m_mapWindow, &MapWindow::setMiniMapMode);
@@ -175,6 +177,7 @@ void MainWindow::connectSignals()
     connect(&m_dataCenter, &DataCenter::markerTypesChanged, this, &MainWindow::renderMarkerTypeControls);
 
     connect(&m_apiClient, &HttpApiClient::eventCreated, &m_eventDispatcher, &EventDispatcher::dispatch);
+    connect(&m_apiClient, &HttpApiClient::usersLoaded, this, &MainWindow::populateUidCombo);
     connect(&m_apiClient, &HttpApiClient::mapMarkersLoaded, &m_dataCenter, &DataCenter::loadPersistentMarkers);
     connect(&m_apiClient, &HttpApiClient::statusChanged, m_statusLabel, &QLabel::setText);
     connect(&m_apiClient, &HttpApiClient::errorOccurred, this, [this](const QString &message) {
@@ -202,13 +205,57 @@ void MainWindow::applyServerEndpoint(bool restartClient)
         ? QString::fromLatin1(DefaultHttpHost)
         : m_httpHostEdit->text().trimmed();
     const int port = m_httpPortSpin->value();
-    const quint64 uid = selectedUid();
 
     m_dataCenter.setHttpEndpoint(host, port);
     m_dataCenter.save();
-    m_dataCenter.setSelectedUid(uid);
-    m_apiClient.setEndpoint(host, port, uid);
+    m_apiClient.setEndpoint(host, port, selectedUid());
     if (restartClient) {
+        m_apiClient.restart();
+    }
+}
+
+void MainWindow::populateUidCombo(const QJsonArray &users)
+{
+    const quint64 defaultUid = m_dataCenter.baseSnapshot().selectedUid;
+    QSignalBlocker blocker(m_uidCombo);
+    m_uidCombo->clear();
+
+    for (const QJsonValue &value : users) {
+        const QJsonObject user = value.toObject();
+        bool ok = false;
+        const quint64 uid = user.value(QStringLiteral("uid")).toVariant().toULongLong(&ok);
+        if (!ok || uid == 0) {
+            continue;
+        }
+        const QString name = user.value(QStringLiteral("name")).toString().trimmed();
+        const QString label = name.isEmpty()
+            ? QString::number(uid)
+            : QStringLiteral("%1 (%2)").arg(name, QString::number(uid));
+        m_uidCombo->addItem(label, QVariant::fromValue(uid));
+    }
+
+    const int defaultIndex = m_uidCombo->findData(QVariant::fromValue(defaultUid));
+    m_uidCombo->setCurrentIndex(defaultIndex >= 0 ? defaultIndex : (m_uidCombo->count() > 0 ? 0 : -1));
+    m_uidCombo->setEnabled(m_uidCombo->count() > 0);
+
+    const quint64 uid = selectedUid();
+    m_dataCenter.setDefaultUid(uid);
+    m_dataCenter.setSelectedUid(uid);
+    m_dataCenter.save();
+    m_apiClient.setEndpoint(m_apiClient.host(), m_apiClient.port(), uid);
+}
+
+void MainWindow::saveSelectedUid()
+{
+    const quint64 uid = selectedUid();
+    if (uid == 0) {
+        return;
+    }
+    m_dataCenter.setDefaultUid(uid);
+    m_dataCenter.setSelectedUid(uid);
+    m_dataCenter.save();
+    m_apiClient.setEndpoint(m_apiClient.host(), m_apiClient.port(), uid);
+    if (m_apiClient.isRunning()) {
         m_apiClient.restart();
     }
 }
@@ -346,7 +393,7 @@ void MainWindow::selectLayerFromCombo()
 quint64 MainWindow::selectedUid() const
 {
     bool ok = false;
-    const quint64 uid = m_uidEdit->text().trimmed().toULongLong(&ok);
+    const quint64 uid = m_uidCombo->currentData().toULongLong(&ok);
     return ok ? uid : 0;
 }
 

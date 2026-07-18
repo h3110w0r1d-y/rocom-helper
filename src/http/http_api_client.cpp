@@ -94,8 +94,8 @@ void HttpApiClient::start()
         return;
     }
     m_running = true;
-    emit statusChanged(QStringLiteral("正在校验服务端版本 %1:%2").arg(m_host).arg(m_port));
-    fetchServerVersion();
+    emit statusChanged(QStringLiteral("正在获取用户列表 %1:%2").arg(m_host).arg(m_port));
+    fetchUsers();
 }
 
 void HttpApiClient::stop()
@@ -148,6 +148,47 @@ QUrl HttpApiClient::apiUrl(const QString &path, bool includeUid) const
         url.setQuery(query);
     }
     return url;
+}
+
+void HttpApiClient::fetchUsers()
+{
+    QNetworkRequest request(apiUrl(QStringLiteral("/api/users")));
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        handleUsersReply(reply);
+    });
+}
+
+void HttpApiClient::handleUsersReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    if (!m_running) {
+        return;
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        m_running = false;
+        emit errorOccurred(QStringLiteral("读取用户列表失败: %1").arg(reply->errorString()));
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (!doc.isArray() || doc.array().isEmpty()) {
+        m_running = false;
+        emit errorOccurred(QStringLiteral("服务端没有可用的 UID"));
+        return;
+    }
+
+    emit usersLoaded(doc.array());
+    if (m_uid == 0) {
+        m_running = false;
+        emit errorOccurred(QStringLiteral("用户列表中没有有效的 UID"));
+        return;
+    }
+
+    emit statusChanged(QStringLiteral("正在校验服务端版本 %1:%2").arg(m_host).arg(m_port));
+    fetchServerVersion();
 }
 
 void HttpApiClient::fetchServerVersion()

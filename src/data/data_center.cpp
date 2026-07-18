@@ -94,6 +94,7 @@ void DataCenter::save()
         {QStringLiteral("version"), m_baseState.version},
         {QStringLiteral("http_host"), m_baseState.httpHost},
         {QStringLiteral("http_port"), m_baseState.httpPort},
+        {QStringLiteral("selected_uid"), QString::number(m_baseState.selectedUid)},
     };
     QFile file(baseConfigPath());
     if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -464,6 +465,11 @@ void DataCenter::loadBaseState()
     if (m_baseState.httpPort < MinHttpPort || m_baseState.httpPort > MaxHttpPort) {
         m_baseState.httpPort = DefaultHttpPort;
     }
+    bool uidOk = false;
+    m_baseState.selectedUid = object.value(QStringLiteral("selected_uid")).toVariant().toULongLong(&uidOk);
+    if (!uidOk) {
+        m_baseState.selectedUid = 0;
+    }
     m_baseDirty = false;
 }
 
@@ -515,6 +521,16 @@ void DataCenter::setHttpEndpoint(const QString &host, int port)
     if (!changed) {
         return;
     }
+    markBaseDirty();
+    emit baseStateChanged(m_baseState);
+}
+
+void DataCenter::setDefaultUid(quint64 uid)
+{
+    if (m_baseState.selectedUid == uid) {
+        return;
+    }
+    m_baseState.selectedUid = uid;
     markBaseDirty();
     emit baseStateChanged(m_baseState);
 }

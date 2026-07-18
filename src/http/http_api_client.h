@@ -48,6 +48,7 @@ public slots:
     void deleteMapMarker(const QString &markerId);
 
 signals:
+    void usersLoaded(const QJsonArray &users);
     void eventCreated(const app::AppEvent &event);
     void mapMarkersLoaded(const QJsonArray &markers);
     void statusChanged(const QString &message);
@@ -55,6 +56,8 @@ signals:
 
 private:
     QUrl apiUrl(const QString &path, bool includeUid = false) const;
+    void fetchUsers();
+    void handleUsersReply(QNetworkReply *reply);
     void fetchServerVersion();
     void handleVersionReply(QNetworkReply *reply);
     void startAfterVersionChecked();
