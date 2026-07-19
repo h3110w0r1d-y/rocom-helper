@@ -164,8 +164,11 @@ void MainWindow::connectSignals()
     connect(m_exportMapButton, &QPushButton::clicked, m_mapWindow, &MapWindow::exportCurrentMapImage);
     connect(m_importPathButton, &QPushButton::clicked, this, &MainWindow::importPathOverlay);
     connect(m_clearPathButton, &QPushButton::clicked, m_mapWindow, &MapWindow::clearPathOverlays);
-    connect(m_markerFilterPanel, &MarkerFilterPanel::typeVisibilityChanged, &m_dataCenter, &DataCenter::setMarkerTypeVisible);
-    connect(m_markerFilterPanel, &MarkerFilterPanel::subtypeVisibilityChanged, &m_dataCenter, &DataCenter::setMarkerSubtypeVisible);
+    // 列表会在 DataCenter 发出 markerTypesChanged 后重建，必须等当前 itemChanged 回调退出后再更新状态。
+    connect(m_markerFilterPanel, &MarkerFilterPanel::typeVisibilityChanged,
+        &m_dataCenter, &DataCenter::setMarkerTypeVisible, Qt::QueuedConnection);
+    connect(m_markerFilterPanel, &MarkerFilterPanel::subtypeVisibilityChanged,
+        &m_dataCenter, &DataCenter::setMarkerSubtypeVisible, Qt::QueuedConnection);
     connect(m_mapWindow, &MapWindow::markerCreateRequested, &m_apiClient, &HttpApiClient::createMapMarker);
     connect(m_mapWindow, &MapWindow::markerUpdateRequested, &m_apiClient, &HttpApiClient::updateMapMarker);
     connect(m_mapWindow, &MapWindow::markerDeleteRequested, &m_apiClient, &HttpApiClient::deleteMapMarker);
