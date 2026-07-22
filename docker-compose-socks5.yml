@@ -9,6 +9,7 @@ services:
       - ROCO_BIND=0.0.0.0
       - ROCO_PORT=4939
       - ROCO_DATA_DIR=/data
+      - ROCO_TLS=false
     ports:
       - "4939:4939"
       - "1080:1080"
