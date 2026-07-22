@@ -218,13 +218,6 @@ void HttpApiClient::handleVersionReply(QNetworkReply *reply)
     const QString serverVersion = doc.isObject()
         ? doc.object().value(QStringLiteral("version")).toString()
         : QString();
-    if (serverVersion != appVersionString()) {
-        m_running = false;
-        emit errorOccurred(QStringLiteral("服务端版本不一致: 服务端 %1，插件 %2")
-                               .arg(serverVersion.isEmpty() ? QStringLiteral("未知") : serverVersion,
-                                    appVersionString()));
-        return;
-    }
 
     startAfterVersionChecked();
 }
