@@ -237,7 +237,9 @@ ParsedSvgPath parseSvgPath(const QString &pathData, bool *ok)
         return tokens.at(index++).toDouble();
     };
     auto readPoint = [&](bool relative) -> QPointF {
-        QPointF point(readNumber(), readNumber());
+        const double x = readNumber();
+        const double y = readNumber();
+        const QPointF point(x, y);
         return relative ? current + point : point;
     };
     auto beginSubpath = [&](const QPointF &point) {
