@@ -13,11 +13,15 @@
 > [!NOTE]
 > 本项目只提供 PVE、宠物筛选、图鉴相关功能，不提供 PVP 或其他影响游戏平衡的功能。
 
-## 交流与第三方项目
+## 交流与友链
 
 遇到问题可加入 QQ 群 939403587；反馈时请说明系统、部署方案、版本、发生时间及已脱敏的相关日志。
 
-- [洛克捕手（zhuweitung/roco-catcher）](https://github.com/zhuweitung/roco-catcher)：基于洛克助手 API 开发的 Android 应用，可统计精灵捕捉数量、速率、任务进度及后台通知。
+- [ROCO Wiki（com.roco.roco_flutter）](https://app.candymo.com/)：ROCO Wiki 是一款面向《洛克王国：世界》的综合资料与策略工具，提供精灵、技能、时装、配队、活动地图、伤害计算和排行榜等功能。
+
+- [洛克捕手（zhuweitung/roco-catcher）](https://github.com/zhuweitung/roco-catcher)：基于本项目 API 开发的 Android 应用，可统计精灵捕捉数量、速率、任务进度及后台通知。
+
+- [洛克图鉴（com.besmile.rocomapp）](https://aismile.dev/zh-hans/roco-tools/app)：洛克图鉴
 
 ## 先选一种方案
 
@@ -297,13 +301,13 @@ Linux 可执行文件只提供直接网卡抓包，不提供 SOCKS5 服务。
   --data_dir=./data
 ~~~
 
-| CLI 参数 | 环境变量 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| -i, --iface | ROCO_IFACE | 默认路由网卡 | pcap 监听接口 |
-| -b, --bind | ROCO_BIND | 127.0.0.1 | Web 服务绑定地址 |
-| -p, --port | ROCO_PORT | 4939 | Web 服务端口 |
-| -d, --data_dir | ROCO_DATA_DIR | Qt 应用数据目录 | 数据库和日志目录 |
-| --filter-host | ROCO_FILTER_HOST | 空 | 单个 IPv4/IPv6 抓包过滤；命令行优先 |
+| CLI 参数         | 环境变量             | 默认值       | 说明                      |
+|----------------|------------------|-----------|-------------------------|
+| -i, --iface    | ROCO_IFACE       | 默认路由网卡    | pcap 监听接口               |
+| -b, --bind     | ROCO_BIND        | 127.0.0.1 | Web 服务绑定地址              |
+| -p, --port     | ROCO_PORT        | 4939      | Web 服务端口                |
+| -d, --data_dir | ROCO_DATA_DIR    | Qt 应用数据目录 | 数据库和日志目录                |
+| --filter-host  | ROCO_FILTER_HOST | 空         | 单个 IPv4/IPv6 抓包过滤；命令行优先 |
 
 ## 功能介绍
 
