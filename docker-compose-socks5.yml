@@ -4,8 +4,13 @@ services:
     container_name: roco-helper
     restart: unless-stopped
     environment:
-      - ROCO_SOCKS5_BIND=0.0.0.0
-      - ROCO_SOCKS5_PORT=1080
+      - ROCO_CAPTURE_MODE=socks5
+      - ROCO_SOCKS5_LISTEN=0.0.0.0:1080
+      # 可选上游 SOCKS5：取消下面注释并修改地址；无认证时用户名和密码均留空。
+      # - ROCO_SOCKS5_UPSTREAM_ENABLED=true
+      # - ROCO_SOCKS5_UPSTREAM_ADDRESS=192.168.1.100:7890
+      # - ROCO_SOCKS5_UPSTREAM_USERNAME=
+      # - ROCO_SOCKS5_UPSTREAM_PASSWORD=
       - ROCO_BIND=0.0.0.0
       - ROCO_PORT=4939
       - ROCO_DATA_DIR=/data
@@ -14,4 +19,5 @@ services:
       - "4939:4939"
       - "1080:1080"
     volumes:
+      # 首次启动生成的 machine-id 随数据目录持久化。
       - ./data:/data

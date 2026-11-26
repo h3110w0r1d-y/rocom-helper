@@ -8,11 +8,13 @@ services:
       - NET_RAW
       - NET_ADMIN
     environment:
+      - ROCO_CAPTURE_MODE=pcap
       - ROCO_IFACE=eth0
       - ROCO_BIND=0.0.0.0
       - ROCO_PORT=4939
       - ROCO_DATA_DIR=/data
-      - ROCO_TLS=false
-      # - ROCO_FILTER_HOST=192.168.0.1 # 解决单臂路由捕获双份流量的问题
+      - ROCO_TLS=true
+      # - ROCO_FILTER_HOST=192.168.0.100 # 解决单臂路由捕获双份流量的问题，只有匹配该 IP 的游戏流量才进入解析
     volumes:
+      # 首次启动生成的 machine-id 随数据目录持久化。
       - ./data:/data
